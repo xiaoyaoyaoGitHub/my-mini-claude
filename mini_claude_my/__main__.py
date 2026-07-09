@@ -16,7 +16,7 @@ from .agent import Agent
 def parse_args() -> argparse.Namespace:
     print(f"使用 argparse 解析入参 返回")
     parser = argparse.ArgumentParser(
-        prog="my_mini_claude", # 程序名 用于 usage行和错误信息里
+        prog="mini_claude_my", # 程序名 用于 usage行和错误信息里
         description="自定义的 mini claude code", # 帮助文本里 usage 行下方、参数列表上方的简短说明
         add_help=False, # 是否自定义添加-h / --help 选项
     )
@@ -63,7 +63,7 @@ def _resolve_permission_mode(args: argparse.Namespace) -> str:
         return "dontAsk"
     return 'default'
 
-async def run_repl() -> None:
+async def run_repl(agent:Agent) -> None:
     """Interactive REPL loop."""
     # 信号中断次数 ctrl + C 按下次数
     sigint_count = 0
@@ -80,6 +80,7 @@ async def run_repl() -> None:
     print_welcome()
     while True:
         print_user_prompt()
+
         try:
             line = input()
         except (EOFError, KeyboardInterrupt):
@@ -90,9 +91,13 @@ async def run_repl() -> None:
         if not inp:
             continue
         if inp in ('exit','quit'):
-            print('\nBye!\n')
+            print('\nBye!Bye!\n')
             break
-
+        # TODO 开始给 agent 发送信息
+        try:
+            await agent.chat(inp)
+        except Exception as error:
+            print(f'\nBye!Bye! {error}\n')
 
 
 def main() -> None:
@@ -141,7 +146,7 @@ Examples:
     permission_mode = _resolve_permission_mode(args)
     print(f"permission mode:{permission_mode}")
     # 访问模型 如果不设置用环境变量配置中的模型
-    model = args.model or os.environ.get('mini_claude_model', 'claude-opus-4-6')
+    model = args.model or os.environ.get('MINI_CLAUDE_MODEL', 'claude-opus-4-6')
     print(f"model:{model}")
     # 自定义请求地址 默认读取本地 .env环境参数 使用 anthropic
     base_url = args.base_url or os.environ.get('ANTHROPIC_BASE_URL',None)
@@ -164,6 +169,6 @@ Examples:
     # 开启 REPL
     # asyncio.run(coro, *, debug=False) 是 Python 3.7+ 提供的"程序入口"
     # 创建事件循环、跑一个协程到结束、清理、关循环，全自动一条龙
-    asyncio.run(run_repl())
+    asyncio.run(run_repl(agent))
 if __name__ == "__main__":
     main()

@@ -3,8 +3,8 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "my-mini-claude"
-version = "1.0.0"
+name = "mini-claude-my"
+version = "1.0.1"
 description = "A minimal coding agent inspired by Claude Code, built from scratch in Python"
 requires-python = ">=3.11"
 license = "MIT"
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-my-mini-claude = "my_mini_claude.__main__:main"
+mini-claude-my = "mini_claude_my.__main__:main"
 
 [tool.setuptools.packages.find]
-include = ["my_mini*"]
+include = ["mini_claude*"]
