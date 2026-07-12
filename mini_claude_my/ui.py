@@ -14,18 +14,20 @@ def print_error(message:str) -> None:
 # 打印欢迎语
 def print_welcome() -> None:
     console.print(f"\n [bold cyan]Welcome my-mini-claude [/bold cyan][dim] A minimal coding agent[/dim]\n")
-    console.print("[dim]Type your request, or 'exit' to quit.[/dim]")
-    console.print('[dim]Commands: /clear /plan /cost /compact /memory /skills[/dim]')
+    console.print("[dim]Type your request, or 'exit' to quit.[/dim]\n")
+    console.print('[dim]Commands: /clear /plan /cost /compact /memory /skills[/dim]\n')
 
 # 打印用户输入
 def print_user_prompt() -> None:
-    console.print("[bold green]>[/bold green]",end="")
+    console.print("\n [bold green]>[/bold green]",end="")
 
-# 打印 thinking
-def print_assistant_prompt(thinking) -> None:
+# 打印 返回结果
+def print_assistant_prompt(text) -> None:
+    sys.stdout.write(text)
+    sys.stdout.flush()
+
+def print_assistant_thinking(thinking):
     console.print(f"[dim]{thinking}[/dim]", end="")
-    # sys.stdout.write(thinking)
-    # sys.stdout.flush()
 
 # 开始thinking
 

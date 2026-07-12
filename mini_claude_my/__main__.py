@@ -95,7 +95,7 @@ async def run_repl(agent:Agent) -> None:
             break
         # TODO 开始给 agent 发送信息
         try:
-            await agent.chat(inp)
+             await agent.chat(inp)
         except Exception as error:
             print(f'\nBye!Bye! {error}\n')
 
@@ -150,7 +150,7 @@ Examples:
     print(f"model:{model}")
     # 自定义请求地址 默认读取本地 .env环境参数 使用 anthropic
     base_url = args.base_url or os.environ.get('ANTHROPIC_BASE_URL',None)
-    print(f"base_url:{base_url}")
+    print(f"base_url:{base_url},thinking:{args.thinking}")
     api_key = os.environ.get('ANTHROPIC_API_KEY',None)
     if not base_url or not api_key:
         print_error( "API key and BASE URL is required .\n"
