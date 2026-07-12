@@ -2,7 +2,7 @@ import anthropic
 import time
 from typing import Any
 
-from .ui import print_error, print_assistant_prompt, start_spinner, stop_spinner,print_assistant_thinking
+from .ui import print_error, print_assistant_prompt, start_spinner, stop_spinner,print_assistant_thinking,print_cost
 
 
 class Agent:
@@ -32,6 +32,12 @@ class Agent:
         self._anthropic_messages: list[dict] = []
         # 创建 anthropic 异步客户端
         self._anthropic_client = anthropic.AsyncAnthropic(api_key=self.api_key, base_url=self.base_url)
+        # 花费
+        self.last_api_call_time = 0.0 
+        self.total_input_tokens = 0
+        self.total_output_tokens = 0
+        self.last_input_tokens = 0
+        self.current_turns = 0 # 记录轮次
 
     # 发送 anthropic_message_stream
     async def _call_anthropic_stream(self):
@@ -45,6 +51,11 @@ class Agent:
             "max_tokens": 1024,
             "model": self.model,
             "messages": self._anthropic_messages,
+            "thinking":{
+                "type":"enabled",
+                "budget_token": 10000,
+                "display":"omitted"
+            }
         }
         """
         async with ... as stream: —— 异步上下文管理器
@@ -94,7 +105,7 @@ class Agent:
                                 stop_spinner()
                                 print_assistant_prompt('\n [thinking...]')
                                 first_text = False
-                            print_assistant_thinking(delta.thinking)
+                            # print_assistant_thinking(delta.thinking)
                         # json增量
                         elif getattr(delta, 'type') == 'input_json_delta':
                             # TODO json 增量
@@ -128,6 +139,15 @@ class Agent:
             "content": user_messages
         }]
         response = await self._call_anthropic_stream()
+        print(f"\n response: {response}")
+        # 记录输入输出 token 及时间
+        self.last_api_call_time = time.time()
+        self.last_input_tokens = response.usage.input_tokens
+        self.total_input_tokens += response.usage.input_tokens
+        self.total_output_tokens += response.usage.output_tokens
+        print_cost(self.total_input_tokens, self.total_output_tokens)
+        self.current_turns += 1
+
         stop_spinner()
         def _block_to_dict(block):
             if block.type == 'text':
