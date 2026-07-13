@@ -28,16 +28,26 @@ class Agent:
         self.base_url = base_url
         self.api_key = api_key
         self.thinking = thinking
+        # 设置思考模式
+        self._thinking_mode = self._resolve_thinking_mode()
         # 创建 anthropic 消息 list 后续可以对对话进行压缩
         self._anthropic_messages: list[dict] = []
         # 创建 anthropic 异步客户端
         self._anthropic_client = anthropic.AsyncAnthropic(api_key=self.api_key, base_url=self.base_url)
         # 花费
-        self.last_api_call_time = 0.0 
+        self.last_api_call_time = 0.0
         self.total_input_tokens = 0
         self.total_output_tokens = 0
         self.last_input_tokens = 0
         self.current_turns = 0 # 记录轮次
+
+    # 设定思考模式
+    def _resolve_thinking_mode(self):
+        if not self.thinking:
+            return "disabled"
+        # todo 这里处理支持 thinking 的模型
+        # todo 这里处理支持 自适应的模型 adaptive
+        return "enabled"
 
     # 发送 anthropic_message_stream
     async def _call_anthropic_stream(self):
@@ -51,12 +61,13 @@ class Agent:
             "max_tokens": 1024,
             "model": self.model,
             "messages": self._anthropic_messages,
-            "thinking":{
-                "type":"enabled",
-                "budget_token": 10000,
-                "display":"omitted"
-            }
         }
+        if self._thinking_mode in ('adaptive', 'enabled'):
+            create_params['thinking'] = {
+                "type":"enabled",
+                "budget_token": 16348,
+                "display": "omitted"
+            }
         """
         async with ... as stream: —— 异步上下文管理器
           - stream() 返回的对象实现了 __aenter__ / __aexit__，是异步上下文管理器
@@ -75,6 +86,7 @@ class Agent:
             start_spinner()
             # 首字输出
             first_text = True
+            first_answer = True
             # 发送请求
             async with self._anthropic_client.messages.stream(**create_params) as stream:
                 async for event in stream:
@@ -97,13 +109,16 @@ class Agent:
                                 stop_spinner()
                                 print('\n', end="", flush=True)
                                 first_text = False
+                            if first_answer:
+                                print('\n', end="", flush=True)
+                                first_answer = False
                             # 最终的内容在此处打印
                             print_assistant_prompt(delta.text)
                         # 思考增量
                         elif getattr(delta, 'type') == 'thinking_delta':
                             if first_text:
                                 stop_spinner()
-                                print_assistant_prompt('\n [thinking...]')
+                                print_assistant_thinking('\n [thinking...]')
                                 first_text = False
                             # print_assistant_thinking(delta.thinking)
                         # json增量
@@ -139,7 +154,7 @@ class Agent:
             "content": user_messages
         }]
         response = await self._call_anthropic_stream()
-        print(f"\n response: {response}")
+        # print(f"\n response: {response}")
         # 记录输入输出 token 及时间
         self.last_api_call_time = time.time()
         self.last_input_tokens = response.usage.input_tokens

@@ -25,9 +25,11 @@ def print_user_prompt() -> None:
 def print_assistant_prompt(text) -> None:
     sys.stdout.write(text)
     sys.stdout.flush()
+
 # 打印 大模型 thinking
 def print_assistant_thinking(thinking):
     console.print(f"[dim]{thinking}[/dim]", end="")
+    # console.print(f"[dim grey50]│ {thinking}[/dim grey50]", end="")
 
 # 打印输出 花费
 def print_cost(input_tokens: int, output_tokens: int) -> None:
@@ -35,7 +37,8 @@ def print_cost(input_tokens: int, output_tokens: int) -> None:
     cost_in = (input_tokens / 1_000_000) * 1
     cost_out = (output_tokens / 1_000_000) * 2
     total_cost = cost_in + cost_out
-    console.print(f"\n [dim] Tokens: {cost_in:.6f} in / {cost_out:.6f} out,Total:~${total_cost:.4f} [/dim]",end="")
+    console.print(f"\n [dim] Tokens: {cost_in:.6f} in / {cost_out:.6f} out,Total:~${total_cost:.4f} [/dim]")
+    console.rule(style="grey50")
 
 # 开始thinking
 SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
