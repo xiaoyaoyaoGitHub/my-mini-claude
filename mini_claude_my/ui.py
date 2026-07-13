@@ -5,6 +5,7 @@ import sys
 #   密集型任务（网络请求、文件读写、等外部资源），不适合 CPU 密集型（被 GIL 卡住，应改用 multiprocessing）。
 import threading
 from rich.console import Console
+from rich.markup import escape
 console = Console()
 
 # 打印错误日志
@@ -28,7 +29,7 @@ def print_assistant_prompt(text) -> None:
 
 # 打印 大模型 thinking
 def print_assistant_thinking(thinking):
-    console.print(f"[dim]{thinking}[/dim]", end="")
+    console.print(f"[dim]{escape(thinking)}[/dim]", end="")
     # console.print(f"[dim grey50]│ {thinking}[/dim grey50]", end="")
 
 # 打印输出 花费

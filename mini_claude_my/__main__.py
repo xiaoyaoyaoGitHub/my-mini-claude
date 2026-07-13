@@ -165,7 +165,6 @@ Examples:
         model=model,
         thinking=args.thinking,
     )
-    print(f"agent:{agent}")
     # 开启 REPL
     # asyncio.run(coro, *, debug=False) 是 Python 3.7+ 提供的"程序入口"
     # 创建事件循环、跑一个协程到结束、清理、关循环，全自动一条龙

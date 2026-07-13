@@ -145,14 +145,14 @@ class Agent:
     # agent 发送 messages
     async def chat(self, user_messages):
         # 将用户信息塞入信息 list
-        # self._anthropic_messages.append({
-        #     "role": "user",
-        #     "content": user_messages
-        # })
-        self._anthropic_messages = [{
+        self._anthropic_messages.append({
             "role": "user",
             "content": user_messages
-        }]
+        })
+        # self._anthropic_messages = [{
+        #     "role": "user",
+        #     "content": user_messages
+        # }]
         response = await self._call_anthropic_stream()
         # print(f"\n response: {response}")
         # 记录输入输出 token 及时间
@@ -166,7 +166,7 @@ class Agent:
         stop_spinner()
         def _block_to_dict(block):
             if block.type == 'text':
-                return {"type": "text", "content": block.text}
+                return {"type": "text", "text": block.text}
             else:
                 return {"type": block.type}
         self._anthropic_messages.append({
