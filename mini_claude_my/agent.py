@@ -233,7 +233,10 @@ class Agent:
             self.last_input_tokens = response.usage.input_tokens
             self.total_input_tokens += response.usage.input_tokens
             self.total_output_tokens += response.usage.output_tokens
-
+            self._anthropic_messages.append({
+                "role": "assistant",
+                "content": [self._block_to_dict(c) for c in response.content]
+            })
             # 如果是工具调用，则需要将工具结果添加到信息中 再次执行一轮对话再次返回
             tool_uses = [ t for t in response.content if t.type == 'tool_use']
             # 如果没有工具调用 打印总体的花费 并中断循环
@@ -263,10 +266,7 @@ class Agent:
                     continue
             self.current_turns += 1
             stop_spinner()
-            self._anthropic_messages.append({
-                "role": "assistant",
-                "content": [self._block_to_dict(c) for c in response.content]
-            })
+
             # 如果工具有返回结果，需要最后添加到 messages，不然下一轮对话大模型认为调用工具没有收到回复
             if tool_results:
                 self._anthropic_messages.append({
