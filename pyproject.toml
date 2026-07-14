@@ -7,7 +7,7 @@ name = "mini-claude-my"
 version = "1.0.1"
 description = "A minimal coding agent inspired by Claude Code, built from scratch in Python"
 requires-python = ">=3.11"
-license = "MIT"
+license = "MIT"my
 dependencies = [
     "anthropic>=0.40.0",
     "openai>=1.50.0",

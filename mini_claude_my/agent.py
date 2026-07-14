@@ -1,9 +1,11 @@
 import anthropic
 import time
+import asyncio
 from typing import Any
 
-from .ui import print_error, print_assistant_prompt, start_spinner, stop_spinner,print_assistant_thinking,print_cost
-
+from .ui import print_error, print_assistant_prompt, start_spinner, stop_spinner,print_assistant_thinking,print_cost,print_tool_call
+from .tools import tool_definitions,CONCURRENCY_SAFE_TOOLS,check_permission, list_files
+from .prompt import build_system_prompt
 
 class Agent:
     # * 是 Python 3 的"关键字参数分界符"：
@@ -28,6 +30,7 @@ class Agent:
         self.base_url = base_url
         self.api_key = api_key
         self.thinking = thinking
+        self._base_system_prompt = build_system_prompt()
         # 设置思考模式
         self._thinking_mode = self._resolve_thinking_mode()
         # 创建 anthropic 消息 list 后续可以对对话进行压缩
@@ -41,6 +44,9 @@ class Agent:
         self.last_input_tokens = 0
         self.current_turns = 0 # 记录轮次
 
+        # 工具 tools
+        self.tools = tool_definitions
+
     # 设定思考模式
     def _resolve_thinking_mode(self):
         if not self.thinking:
@@ -50,7 +56,7 @@ class Agent:
         return "enabled"
 
     # 发送 anthropic_message_stream
-    async def _call_anthropic_stream(self):
+    async def _call_anthropic_stream(self,on_tool_block_complete=None):
 
         """
         *...: 把切片结果解包成位置参数/列表元素
@@ -61,6 +67,9 @@ class Agent:
             "max_tokens": 1024,
             "model": self.model,
             "messages": self._anthropic_messages,
+            "tools": self.tools,
+            "system": self._base_system_prompt,
+
         }
         if self._thinking_mode in ('adaptive', 'enabled'):
             create_params['thinking'] = {
@@ -87,6 +96,10 @@ class Agent:
             # 首字输出
             first_text = True
             first_answer = True
+
+            # 工具块记录
+            tool_blocks_by_index: dict[int, dict[str, Any]] = {}
+
             # 发送请求
             async with self._anthropic_client.messages.stream(**create_params) as stream:
                 async for event in stream:
@@ -96,8 +109,31 @@ class Agent:
                     每个内容块都有一个 index，对应于其在最终 Message content 数组中的索引。
                     有一个例外：在服务器端回退响应期间，fallback 内容块会在每个模型边界处以一对 content_block_start 和 content_block_stop 的形式到达，中间没有任何增量
                     """
+                    # print(f"\n {event}", end="", flush=True)
                     if getattr(event, 'type') == 'content_block_start':
-                        pass
+                        """
+                        数据格式： 
+                        RawContentBlockStartEvent(
+                            content_block=ToolUseBlock(
+                                id='toolu_015796266d104da69c40d0a3', 
+                                caller=None, 
+                                input={}, 
+                                name='list_files', 
+                                type='tool_use'
+                            ), 
+                            index=1, 
+                            type='content_block_start'
+                        )
+                        """
+                        cb = getattr(event, 'content_block')
+                        if cb.type == 'tool_use':
+                            # 根据 event id 记录需调用的工具
+                            tool_blocks_by_index[event.index] = {
+                                "id":cb.id,
+                                "name": cb.name,
+                                "input_json":""
+                            }
+
                     # delta 增量
                     if getattr(event, 'type') == 'content_block_delta':
                         # 内容块增量
@@ -123,10 +159,31 @@ class Agent:
                             # print_assistant_thinking(delta.thinking)
                         # json增量
                         elif getattr(delta, 'type') == 'input_json_delta':
-                            # TODO json 增量
-                            pass
+                            # 收集 tool 入参
+                            tb = tool_blocks_by_index.get(event.index)
+                            if hasattr(delta, 'partial_json'):
+                                tb["input_json"] += delta.partial_json
                     if getattr(event, 'type') == 'content_block_stop':
-                        pass
+                        # 开始调用工具
+                        # 删除指定的键并返回它对应的值
+                        tb = tool_blocks_by_index.pop(event.index,None)
+                        # todo 处理工具调用
+                        if tb and on_tool_block_complete:
+                            import json as _json
+                            try:
+                                # 把 json 对象转化成 python 对象
+                                parsed =  _json.loads(tb['input_json'] or "{}")
+                            except Exception:
+                                parsed = {}
+                            #  parsed: {'pattern': '*'}
+                            # tb:{'id': 'toolu_9adfa024869046df8f0687f6', 'name': 'list_files', 'input_json': '{"pattern": "*"}'}
+                            print(f"\n parsed: {parsed}, tb:{tb}", end="", flush=True)
+                            on_tool_block_complete({
+                                "type":"tool_use",
+                                "id": tb['id'],
+                                "name":tb['name'],
+                                "input":parsed,
+                            })
                 final_messages = await stream.get_final_message()
                 # print(f"final_messages: {final_messages}")
                 final_messages.content = [c for c in final_messages.content if c.type != 'thinking']
@@ -142,6 +199,12 @@ class Agent:
             print_error(f'{etype}/{code}: {msg}')
             return None
 
+    # 工具分发器
+    async def _execute_tool(self, block):
+        if block['name'] == 'list_files':
+            return list_files(block['input'])
+        return None
+
     # agent 发送 messages
     async def chat(self, user_messages):
         # 将用户信息塞入信息 list
@@ -149,29 +212,84 @@ class Agent:
             "role": "user",
             "content": user_messages
         })
-        # self._anthropic_messages = [{
-        #     "role": "user",
-        #     "content": user_messages
-        # }]
-        response = await self._call_anthropic_stream()
-        # print(f"\n response: {response}")
-        # 记录输入输出 token 及时间
-        self.last_api_call_time = time.time()
-        self.last_input_tokens = response.usage.input_tokens
-        self.total_input_tokens += response.usage.input_tokens
-        self.total_output_tokens += response.usage.output_tokens
-        print_cost(self.total_input_tokens, self.total_output_tokens)
-        self.current_turns += 1
+        # 如果不使用工具 可以不需要该循环，如果使用到了工具，需要将工具结果再次添加到 messages中
+        # 询问大模型 直到给出结果
+        while True:
+            # 保存需要执行的工具
+            early_executions:dict[str, asyncio.Task] = {}
+            print(f"_anthropic_messages: {len(self._anthropic_messages)}")
+            def _on_tool_block(tool_block:dict[str, str]) -> None:
+                prem = check_permission()
+                if prem['action'] == "allow":
+                    # 创建 task 每个 task 中触发工具调用执行
+                    task = asyncio.create_task(self._execute_tool(tool_block))
+                    # 并将 task 保存到 early_executions中
+                    early_executions[tool_block['id']] = task
 
-        stop_spinner()
-        def _block_to_dict(block):
-            if block.type == 'text':
-                return {"type": "text", "text": block.text}
-            else:
-                return {"type": block.type}
-        self._anthropic_messages.append({
-            "role": "assistant",
-            "content": [_block_to_dict(c) for c in response.content]
-        })
+            response = await self._call_anthropic_stream(on_tool_block_complete=_on_tool_block)
+            # print(f"\n response: {response}")
+            # 记录输入输出 token 及时间
+            self.last_api_call_time = time.time()
+            self.last_input_tokens = response.usage.input_tokens
+            self.total_input_tokens += response.usage.input_tokens
+            self.total_output_tokens += response.usage.output_tokens
 
+            # 如果是工具调用，则需要将工具结果添加到信息中 再次执行一轮对话再次返回
+            tool_uses = [ t for t in response.content if t.type == 'tool_use']
+            # 如果没有工具调用 打印总体的花费 并中断循环
+            if not tool_uses:
+                print_cost(self.total_input_tokens, self.total_output_tokens)
+                break
+            # 执行工具
+            tool_results:list[dict] = []
+            for tu in tool_uses:
+                """
+                    ToolUseBlock(
+                        id='toolu_54da5a2d6bcb4c1fbeff9381', 
+                        caller=None, 
+                        input={'pattern': '*'}, 
+                        name='list_files', 
+                        type='tool_use'
+                    )
+                """
+                inp = dict(tu.input)
+                print_tool_call(tu.name, inp)
+                # 开始获取工具调用结果
+                tool_task = early_executions.get(tu.id)
+                if tool_task:
+                    result = await tool_task
+                    print(f"\n task result: {result}")
+                    tool_results.append({"type":"tool_result","tool_use_id":tu.id, "content": result})
+                    continue
+            self.current_turns += 1
+            stop_spinner()
+            self._anthropic_messages.append({
+                "role": "assistant",
+                "content": [self._block_to_dict(c) for c in response.content]
+            })
+            # 如果工具有返回结果，需要最后添加到 messages，不然下一轮对话大模型认为调用工具没有收到回复
+            if tool_results:
+                self._anthropic_messages.append({
+                    "role":"user",
+                    "content": tool_results
+                })
+
+    @staticmethod # 放到类命名空间的普通函数，不需要访问实例 self 或者 类 cls
+    def _block_to_dict(block) -> dict:
+        """ 记录大模型返回的信息 """
+        if block.type == 'text':
+            return {"type": "text", "text": block.text}
+        elif block.type == 'tool_use':
+            """
+                ToolUseBlock(
+                    id='toolu_54da5a2d6bcb4c1fbeff9381', 
+                    caller=None, 
+                    input={'pattern': '*'}, 
+                    name='list_files', 
+                    type='tool_use'
+                )
+            """
+            return {"type":"tool_use","id":block.id,"name":block.name,"input":block.input}
+        else:
+            return {"type": block.type}
 

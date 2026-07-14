@@ -8,6 +8,26 @@ from rich.console import Console
 from rich.markup import escape
 console = Console()
 
+# 给工具前面添加 icon
+_TOOL_ICONS = {
+    "read_file": "📖",
+    "write_file": "✏️",
+    "edit_file": "🔧",
+    "list_files": "📁",
+    "grep_search": "🔍",
+    "run_shell": "💻",
+    "skill": "⚡",
+    "agent": "🤖",
+}
+
+def _get_tool_icon(name: str) -> str:
+    return _TOOL_ICONS.get(name, "🔨")
+
+# 打印工具调用
+def print_tool_call(name:str, inp:dict) -> None:
+    icon = _get_tool_icon(name)
+    console.print(f"\n  [yellow]{icon} {name}[/yellow][dim] {str(inp)}[/dim]")
+
 # 打印错误日志
 def print_error(message:str) -> None:
     console.print(f" [bold red]Error:{message}[/bold red] ")
@@ -38,7 +58,7 @@ def print_cost(input_tokens: int, output_tokens: int) -> None:
     cost_in = (input_tokens / 1_000_000) * 1
     cost_out = (output_tokens / 1_000_000) * 2
     total_cost = cost_in + cost_out
-    console.print(f"\n [dim] Tokens: {cost_in:.6f} in / {cost_out:.6f} out,Total:~${total_cost:.4f} [/dim]")
+    console.print(f"\n [dim] Tokens: {cost_in:.6f} in / {cost_out:.6f} out,Total:~${total_cost:.4f} [/dim]\n")
     console.rule(style="grey50")
 
 # 开始thinking
