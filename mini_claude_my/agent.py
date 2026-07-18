@@ -3,8 +3,8 @@ import time
 import asyncio
 from typing import Any
 
-from .ui import print_error, print_assistant_prompt, start_spinner, stop_spinner,print_assistant_thinking,print_cost,print_tool_call
-from .tools import tool_definitions,CONCURRENCY_SAFE_TOOLS,check_permission, list_files
+from .ui import print_error, print_assistant_prompt, start_spinner, stop_spinner,print_assistant_thinking,print_cost,print_tool_call,print_tool_result
+from .tools import tool_definitions,CONCURRENCY_SAFE_TOOLS,check_permission, _execute_tool
 from .prompt import build_system_prompt
 
 class Agent:
@@ -74,7 +74,7 @@ class Agent:
         if self._thinking_mode in ('adaptive', 'enabled'):
             create_params['thinking'] = {
                 "type":"enabled",
-                "budget_token": 16348,
+                "budget_tokens": 16348,
                 "display": "omitted"
             }
         """
@@ -177,7 +177,7 @@ class Agent:
                                 parsed = {}
                             #  parsed: {'pattern': '*'}
                             # tb:{'id': 'toolu_9adfa024869046df8f0687f6', 'name': 'list_files', 'input_json': '{"pattern": "*"}'}
-                            print(f"\n parsed: {parsed}, tb:{tb}", end="", flush=True)
+                            # print(f"\n parsed: {parsed}, tb:{tb}", end="", flush=True)
                             on_tool_block_complete({
                                 "type":"tool_use",
                                 "id": tb['id'],
@@ -199,11 +199,6 @@ class Agent:
             print_error(f'{etype}/{code}: {msg}')
             return None
 
-    # 工具分发器
-    async def _execute_tool(self, block):
-        if block['name'] == 'list_files':
-            return list_files(block['input'])
-        return None
 
     # agent 发送 messages
     async def chat(self, user_messages):
@@ -217,16 +212,27 @@ class Agent:
         while True:
             # 保存需要执行的工具
             early_executions:dict[str, asyncio.Task] = {}
-            print(f"_anthropic_messages: {len(self._anthropic_messages)}")
-            def _on_tool_block(tool_block:dict[str, str]) -> None:
-                prem = check_permission()
+            # print(f"_anthropic_messages: {len(self._anthropic_messages)}")
+            """
+                {
+                    "type":"tool_use",
+                    "id": tb['id'],
+                    "name":tb['name'],
+                    "input":parsed,
+                }
+            """
+            def _on_tool_block(tool_block:dict[str, Any]) -> None:
+                # 权限校验
+                prem = check_permission(tool_block["name"], tool_block['input'], self.permission_mode)
                 if prem['action'] == "allow":
                     # 创建 task 每个 task 中触发工具调用执行
-                    task = asyncio.create_task(self._execute_tool(tool_block))
+                    task = asyncio.create_task(_execute_tool(tool_block))
                     # 并将 task 保存到 early_executions中
                     early_executions[tool_block['id']] = task
 
             response = await self._call_anthropic_stream(on_tool_block_complete=_on_tool_block)
+            if not response:
+                break
             # print(f"\n response: {response}")
             # 记录输入输出 token 及时间
             self.last_api_call_time = time.time()
@@ -261,12 +267,13 @@ class Agent:
                 tool_task = early_executions.get(tu.id)
                 if tool_task:
                     result = await tool_task
-                    print(f"\n task result: {result}")
-                    tool_results.append({"type":"tool_result","tool_use_id":tu.id, "content": result})
-                    continue
+                else:
+                    # 如果没有 则需要立即执行
+                    result = await _execute_tool({"name":tu.name, "input":inp})
+                print_tool_result(tu.name, result)
+                tool_results.append({"type": "tool_result", "tool_use_id": tu.id, "content": result})
             self.current_turns += 1
             stop_spinner()
-
             # 如果工具有返回结果，需要最后添加到 messages，不然下一轮对话大模型认为调用工具没有收到回复
             if tool_results:
                 self._anthropic_messages.append({

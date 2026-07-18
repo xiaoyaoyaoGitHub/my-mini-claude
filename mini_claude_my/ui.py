@@ -28,6 +28,18 @@ def print_tool_call(name:str, inp:dict) -> None:
     icon = _get_tool_icon(name)
     console.print(f"\n  [yellow]{icon} {name}[/yellow][dim] {str(inp)}[/dim]")
 
+def print_tool_result(name,result: str) -> None:
+    if name == 'edit_file':
+        for line in result.splitlines():
+            if line.startswith("@@"):
+                console.print(f"[cyan]  {line}[/cyan]")
+            elif line.startswith("-"):
+                console.print(f"[red]  {line}[/red]")
+            elif line.startswith("+"):
+                console.print(f"[green]  {line}[/green]")
+            else:
+                console.print(f"[dim]  {line}[/dim]")
+
 # 打印错误日志
 def print_error(message:str) -> None:
     console.print(f" [bold red]Error:{message}[/bold red] ")

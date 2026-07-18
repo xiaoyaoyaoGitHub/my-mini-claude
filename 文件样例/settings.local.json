@@ -1,0 +1,46 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mv /Users/wangly/Documents/互动系统/jd-sdk/src/components/JdButton /Users/wangly/Documents/互动系统/jd-sdk/src/components/YzButton)",
+      "Bash(mv /Users/wangly/Documents/互动系统/jd-sdk/src/components/JdDialog /Users/wangly/Documents/互动系统/jd-sdk/src/components/YzDialog)",
+      "Bash(npx vue-tsc *)",
+      "Skill(gsd:next)",
+      "Bash(bun run *)",
+      "Bash(npx vite *)",
+      "Bash(git add *)",
+      "Bash(git commit --no-verify -m ' *)",
+      "Bash(git commit *)",
+      "Bash(curl -s http://localhost:5175/)",
+      "Bash(curl -s http://localhost:5175)",
+      "Bash(curl -s http://localhost:5175/h5.html)",
+      "Bash(curl -s 'http://localhost:5175/src/components/preview/FormInputPreview.vue')",
+      "Bash(curl -s 'http://localhost:5175/src/h5/H5App.vue')",
+      "Bash(curl -s 'http://localhost:5175/src/App.vue')",
+      "WebFetch(domain:activity.zzywlg.cn)",
+      "Bash(curl -s -L 'https://activity.zzywlg.cn/activity/index?id=39791&slotId=481910&login=normal&appKey=2uvC94u3WEy7gaqcNBvHqe7VSgAs&deviceId=01a8fea6-982a-4c65-8621-edac6ea5e747&dsm=1.481910.0.0&dsm2=1.481910.2.39791&tenter=SOW&subActivityWay=1&tck_rid_6c8=0a640015mpf7quv7-2259155&tck_loc_c5d=tactivity-39791&dcm=401.481910.0.0&netType=2&tenter=SOW&visType=0&specialType=0&belongToGroup=1&sourcePage=39791&deviceIdType=2&formUserId=null&isTestActivityType=0&userType=1&ep=G9oPV57qEZmhvQqAwyYfu5xWQWtyAY5JstXlAri03LHe3y5z18jhwv3vJp-gxLCki9tFxcaF5fKO7UauzbVMhQ==&iframe=1&openStyleType=2017&sign=BCD84F46F6E605922A860EB67B9D7CB1&nt=1')",
+      "Bash(curl -sI 'https://activity.zzywlg.cn/activity/index?id=39791')",
+      "Bash(curl -s 'https://yun.tuisnake.com/tact/vendor/vendor.6c6e6c1d.js')",
+      "Bash(curl -s 'https://yun.tuisnake.com/tact/core/core.umd.min.f10149d9.js')",
+      "Bash(npm run *)",
+      "Bash(python3 -m http.server 4311 --directory .)",
+      "Bash(open http://localhost:4311/landing-page-config/)",
+      "Bash(curl *)",
+      "Bash(git init *)",
+      "Bash(git rm *)",
+      "Bash(rm -rf editor/.git)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -n --rawfile c \"${CLAUDE_PROJECT_DIR:-.}/AGENTS.md\" '{hookSpecificOutput: {hookEventName: \"SessionStart\", additionalContext: $c}}'"
+          }
+        ]
+      }
+    ]
+  }
+}
