@@ -2,6 +2,7 @@ from pathlib import Path
 import os
 import json
 import difflib
+import subprocess
 # 并发安全的工具 可以并行执行(只读 无副作用)
 CONCURRENCY_SAFE_TOOLS = {"read_file","list_files","grep_search","web_search"}
 
@@ -154,6 +155,8 @@ async def _execute_tool(block):
         return write_files(block["input"])
     if block["name"] == "edit_file":
         return edit_files(block["input"])
+    if block["name"] == "grep_search":
+        return grep_search(block["input"])
     return f"unknow tool: {block['name']}"
 
 
@@ -214,6 +217,52 @@ def check_permission(tool_name:str, inp:dict, permission_mode) -> dict:
         return {"action":"allow"}
     return {"action":"allow"}
 
+# 搜索 grep_search
+# {'pattern': 'def \\w+|tool_|Tool|tool', 'include': '*.py', 'path': '/Users/wangly/Documents/study/pythons/my-mini-claude/mini_claude_my'}
+def grep_search(inp) -> str:
+    pattern = inp["pattern"]
+    path = inp.get("path") or "."
+    include = inp.get("include")
+    """
+     --color=never 不展示颜色
+     --line-numbers (-n) 输出带行号 方便模型定位
+     -r 递归查找
+    """
+    args = ["grep","--color=never","--line-number",'-r']
+    if include:
+        args.append(f"--include={include}")
+    """
+     -- 参数结束标记，表示后面的都是位置参数不是选项
+    """
+    args.extend(["--",pattern, path])
+    """
+    capture_output = True 捕获 stdout/stderr 到 result对象 而不是打到终端
+    text=True  返回 str 而不是 bytes
+    timeout 超时 防止大目录搜所卡死 agent
+    """
+    try:
+        result = subprocess.run(args, capture_output=True, text=True, timeout=10)
+    except subprocess.TimeoutExpired:
+        # 处理超时返回
+        return "Error: search timed out after 10s. Try a narrower pattern or path."
+    print("grep_search_result",result.returncode)
+    # returncode 1 没有匹配到 2 有错误 0 找到匹配（语法错误 路径不匹配）
+    if result.returncode == 1:
+        return "No matches found"
+    if result.returncode == 0:
+        # print("grep_search_result",result.stdout.split("\n"))
+        lines =[l for l in result.stdout.split("\n") if l]
+        # for l in result.stdout.split("\n"):
+        #     print(f"stdout: {l}")
+        content = '\n'.join(lines[:100])
+        # 防止内容过多 上下文撑爆
+        if len(lines) > 100:
+            return f"{content}, more than {len(lines)-100} lines matched"
+        return content
+    # 如果错误 返回给模型错误结果
+    return f"Error: {result.stderr.strip()}"
+
+
 # edit_files {'file_path': '/Users/wangly/Documents/study/pythons/my-mini-claude/test.txt', 'old_string': 'include = ["mini_claude*"]', 'new_string': 'include = ["mini_claude*"]\n\n你好
 # 王豆豆'}
 
@@ -272,11 +321,12 @@ def list_files(inp) -> str:
     for f in base.glob(pattern):
         # print(f"\n f: {f}")
         if f.is_file():
+            # relative_to 获取相对于 base 的路径
             rel = str(f.relative_to(base) if base != Path('.') else f)
             # 不收集.git .idea
             if ".git" in rel.split(os.sep):
                 continue
-            print(f"rel: {rel},type: {type(rel)}")
+            # print(f"rel: {rel},type: {type(rel)}")
             files.append(rel)
     if not files:
         return "当前目录没有可以查看的文件"
