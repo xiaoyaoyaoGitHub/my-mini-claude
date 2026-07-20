@@ -4,7 +4,7 @@ import asyncio
 from typing import Any
 
 from .ui import print_error, print_assistant_prompt, start_spinner, stop_spinner,print_assistant_thinking,print_cost,print_tool_call,print_tool_result
-from .tools import tool_definitions,CONCURRENCY_SAFE_TOOLS,check_permission, _execute_tool
+from .tools import tool_definitions,CONCURRENCY_SAFE_TOOLS,check_permission, _execute_tool,record_permission_settings
 from .prompt import build_system_prompt
 
 class Agent:
@@ -265,11 +265,24 @@ class Agent:
                 print_tool_call(tu.name, inp)
                 # 开始获取工具调用结果
                 tool_task = early_executions.get(tu.id)
+                result = ''
                 if tool_task:
                     result = await tool_task
                 else:
-                    # 如果没有 则需要立即执行
-                    result = await _execute_tool({"name":tu.name, "input":inp})
+                    # 如果没有 检查下权限
+                    perm = check_permission(tu.name, tu.input, self.permission_mode)
+                    # 需要确认
+                    if perm["action"] == "confirm":
+                        print(f"{tu.name},{perm['message']}")
+                        result = input("  Allow? (y/n): ")
+                        print(f"allow result: {result}")
+                        # 用户拒绝
+                        if not result.lower().startswith("y"):
+                            tool_results.append({"type":"tool_result","tool_use_id":tu.id, "content":"User denied this action."})
+                            continue
+                        result = await _execute_tool({"name": tu.name, "input": inp})
+                        # 把当前权限内容添加到project_settings
+                        record_permission_settings(tu.name, perm["message"])
                 print_tool_result(tu.name, result)
                 tool_results.append({"type": "tool_result", "tool_use_id": tu.id, "content": result})
             self.current_turns += 1

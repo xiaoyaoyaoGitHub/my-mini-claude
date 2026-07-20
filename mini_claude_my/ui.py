@@ -38,7 +38,7 @@ def print_tool_result(name,result: str) -> None:
             elif line.startswith("+"):
                 console.print(f"[green]  {line}[/green]")
             else:
-                console.print(f"[dim]  {line}[/dim]")
+                console.print(f"[dim] _read_key {line}[/dim]")
 
 # 打印错误日志
 def print_error(message:str) -> None:

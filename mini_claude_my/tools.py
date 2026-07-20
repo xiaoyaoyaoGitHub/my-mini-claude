@@ -71,7 +71,7 @@ tool_definitions: list[dict] = [
         },
     },
     {
-        "name": "run_shell",
+        "name": "run_bash",
         "description": "Execute a shell command and return its output. Use this for running tests, installing packages, git operations, etc.",
         "input_schema": {
             "type": "object",
@@ -157,6 +157,9 @@ async def _execute_tool(block):
         return edit_files(block["input"])
     if block["name"] == "grep_search":
         return grep_search(block["input"])
+    if block["name"] == "run_bash":
+        return run_bash(block["input"])
+
     return f"unknow tool: {block['name']}"
 
 
@@ -193,29 +196,78 @@ def load_permission_rules() -> dict:
 
     return {"allow":allow, "deny":deny}
 
+# 添加权限记录
+def record_permission_settings(tool_name:str, pattern:str) -> None:
+    current_path = Path.cwd() / '.my_claude' / 'user_settings.json'
+    permission_settings = load_settings(current_path) or {}
+    allows = permission_settings.setdefault("permissions",{}).setdefault('allow',[])
+    tool_rule = {"tool":tool_name, "pattern":pattern}
+    if tool_rule not in allows:
+        allows.append(tool_rule)
+    current_path.parent.mkdir(parents=True, exist_ok=True)
+    """
+        json.dump:  是把 Python 对象序列化成 JSON 字符串（dump string)
+            ensure_ascii=False 中文原样展示
+            indent=2 格式化缩进
+    """
+    current_path.write_text(json.dumps(permission_settings,ensure_ascii=False, indent=2), encoding="utf-8")
+
 # 检查文件类型是否匹配
 def _match_rules(rule, tool_name, inp) -> bool:
     if rule["tool"] != tool_name:
         return False
+    # 该工具没有pattern 随便调用
     if rule["pattern"] is None:
         return True
-    return True
+
+    value = ''
+    # 获取到大模型中 run_bash 调用的操作
+    if tool_name ==  "run_bash":
+        value = inp.get("command")
+    pattern = rule["pattern"]
+    print(f"match_rules,{value},{pattern}")
+    if pattern.endswith("*"): # git add *
+        return value.startwith(pattern[:-1]) # 去掉 * 进行前缀匹配
+    return value == pattern # 直接进行匹配
+
+# 检查用户项目中是否设置权限在 setting.json中
+def _check_permission_rules(tool_name:str, inp:dict) -> str | None:
+    # 加载本地记录权限文件
+    settings_rules = load_permission_rules()
+    for allow in settings_rules["allow"]:
+        if _match_rules(allow, tool_name, inp):
+            return "allow"
+    for deny in settings_rules['deny']:
+        if _match_rules(deny, tool_name, inp):
+            return "deny"
+    return None
+
 
 def check_permission(tool_name:str, inp:dict, permission_mode) -> dict:
     """Return {"action":"allow/deny/confirm"}"""
     if permission_mode == 'byPassPermissions':
         return {"action":"allow"}
-    # 检查用户项目中是否设置权限在 setting.json中
-    result_rules = load_permission_rules()
-    for allow in result_rules['allow']:
-        if _match_rules(allow, tool_name, inp):
-            return {"action":"allow"}
-    for deny in result_rules['deny']:
-        if _match_rules(deny, tool_name, inp):
-          return {"action":"deny"}
+
+    rule_result = _check_permission_rules(tool_name, inp)
+    print(f"rule_result,{rule_result}")
+    if rule_result == 'allow':
+        return {"action":"allow"}
+    if rule_result == 'deny':
+        return {"action":"deny"}
     if tool_name in CONCURRENCY_SAFE_TOOLS:
         return {"action":"allow"}
+
+    # 拦截危险操作 进行权限确认
+    if tool_name == "run_bash":
+        return {"action":"confirm","message":inp.get("command")}
     return {"action":"allow"}
+
+
+# run_bash
+def run_bash(inp) -> str:
+
+    return  ''
+
 
 # 搜索 grep_search
 # {'pattern': 'def \\w+|tool_|Tool|tool', 'include': '*.py', 'path': '/Users/wangly/Documents/study/pythons/my-mini-claude/mini_claude_my'}
