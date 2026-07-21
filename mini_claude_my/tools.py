@@ -3,6 +3,7 @@ import os
 import json
 import difflib
 import subprocess
+import shlex
 # 并发安全的工具 可以并行执行(只读 无副作用)
 CONCURRENCY_SAFE_TOOLS = {"read_file","list_files","grep_search","web_search"}
 
@@ -176,32 +177,47 @@ def load_settings(file_path) -> dict | None:
 # 检查下用户本地文件权限设置
 def load_permission_rules() -> dict:
     # 地址拼接 Path.home 固定的用户主目录 Path.cwd 用户当前的工作目录
-    user_settings_path = Path.home() / ".my-claude" / "user_settings.json"
-    project_settings_path = Path.cwd() / ".my-claude" / "project_settings.json"
+    user_settings_path = Path.home() / ".my_claude" / "user_settings.json"
+    project_settings_path = Path.cwd() / ".my_claude" / "project_settings.json"
     # 读取 json 文件
     user_settings = load_settings(user_settings_path)
     project_settings = load_settings(project_settings_path)
 
     allow: list[dict] = []
     deny: list[dict] = []
-
+    # print(f"Loading project_settings_path rules for {project_settings_path}")
     for settings in [user_settings, project_settings]:
         if not settings or "permissions" not in settings:
             continue
         perms = settings.get('permissions')
+        # print(f"permissions: {perms}")
         if perms.get('allow'):
-            allow.append(perms.get('allow'))
+            allow.extend(perms.get('allow'))
         if perms.get('deny'):
-            deny.append(perms.get('deny'))
+            deny.extend(perms.get('deny'))
 
     return {"allow":allow, "deny":deny}
 
+# 转换命令 git diff --stat  -> git diff *
+# npm run build -> npm run *
+def _to_rule_pattern(token) -> str:
+    words = token.split() # 以空白符分割
+    # 如果只有一个字符 则直接返回
+    if len(words) <= 1:
+        return token
+    # 否则只取前 2 个
+    return " ".join(words[:2]) + ' *'
+
 # 添加权限记录
 def record_permission_settings(tool_name:str, pattern:str) -> None:
-    current_path = Path.cwd() / '.my_claude' / 'user_settings.json'
+    current_path = Path.cwd() / '.my_claude' / 'project_settings.json'
     permission_settings = load_settings(current_path) or {}
     allows = permission_settings.setdefault("permissions",{}).setdefault('allow',[])
-    tool_rule = {"tool":tool_name, "pattern":pattern}
+
+    # 将 pattern 转化为 带有通配符
+    tokens = split_command(pattern)
+    final_pattern = " && ".join(_to_rule_pattern(token) for token in tokens)
+    tool_rule = {"tool":tool_name, "pattern":final_pattern}
     if tool_rule not in allows:
         allows.append(tool_rule)
     current_path.parent.mkdir(parents=True, exist_ok=True)
@@ -212,6 +228,41 @@ def record_permission_settings(tool_name:str, pattern:str) -> None:
     """
     current_path.write_text(json.dumps(permission_settings,ensure_ascii=False, indent=2), encoding="utf-8")
 
+# 拆分命令
+def split_command(command:str) -> list[str]:
+    """ 把复合命令按 shell 操作符拆解整子命令列表 """
+    command = command.replace("\n",";")
+    # 创建词法分析器：
+    #   posix=True             → 按 POSIX shell 规则处理引号/转义（"a b" 算一个 token，引号本身被去掉）
+    #   punctuation_chars=True → 让 && ; | & 等标点成为独立 token；不开的话它们会被粘进普通单词里
+    lex = shlex.shlex(command, posix=True, punctuation_chars=True)
+    # 只按空白切分单词，不按 shlex 默认的更细规则切
+    # （默认模式会把 git-status 里的 - 也当分隔切开，开了这个开关就只有空格/引号/标点起作用）
+    # print(f"command:{command}")
+    # print(f"lex:{lex}")
+    lex.whitespace_split = True
+    part, current = [], []
+    for token in lex:
+        # print(f"token:{token}")
+        # 单个分词记录
+        if token in {"&&", "||", ";", "|", "&"}:
+            part.append(" ".join(current))
+            current = []
+        else:
+            current.append(token)
+    if current:
+        part.append(" ".join(current))
+    return part
+
+# 单个匹配
+def _single_match_pattern(sub_rule, sub_pattern) -> bool:
+    """ 单个匹配规则 """
+    if sub_rule.endswith(" *"):
+        return sub_pattern.startswith(sub_rule[:-2])
+    if sub_rule.endswith("*"):
+        return sub_pattern.startswith(sub_rule[:-1])
+    return sub_rule == sub_pattern
+
 # 检查文件类型是否匹配
 def _match_rules(rule, tool_name, inp) -> bool:
     if rule["tool"] != tool_name:
@@ -219,23 +270,34 @@ def _match_rules(rule, tool_name, inp) -> bool:
     # 该工具没有pattern 随便调用
     if rule["pattern"] is None:
         return True
-
     value = ''
     # 获取到大模型中 run_bash 调用的操作
     if tool_name ==  "run_bash":
         value = inp.get("command")
     pattern = rule["pattern"]
-    print(f"match_rules,{value},{pattern}")
-    if pattern.endswith("*"): # git add *
-        return value.startwith(pattern[:-1]) # 去掉 * 进行前缀匹配
-    return value == pattern # 直接进行匹配
+
+    # 使用 shlex 拆分 rule 与 pattern进行匹配
+    sub_rules = split_command(pattern)
+    sub_patterns = split_command(value)
+    print(f"sub_rules: {sub_rules}, sub_pattern: {sub_patterns}")
+    for sub_pattern in sub_patterns:
+        matched = False
+        for sub_rule in sub_rules:
+            if _single_match_pattern(sub_rule, sub_pattern):
+                matched = True
+                break
+        if not matched:
+            return False
+    return True
 
 # 检查用户项目中是否设置权限在 setting.json中
 def _check_permission_rules(tool_name:str, inp:dict) -> str | None:
     # 加载本地记录权限文件
     settings_rules = load_permission_rules()
+    # print(f"settings_rules: {settings_rules},{inp}")
     for allow in settings_rules["allow"]:
         if _match_rules(allow, tool_name, inp):
+            print(f"命中本地allow规则")
             return "allow"
     for deny in settings_rules['deny']:
         if _match_rules(deny, tool_name, inp):
@@ -249,7 +311,7 @@ def check_permission(tool_name:str, inp:dict, permission_mode) -> dict:
         return {"action":"allow"}
 
     rule_result = _check_permission_rules(tool_name, inp)
-    print(f"rule_result,{rule_result}")
+    # print(f"rule_result,{rule_result}")
     if rule_result == 'allow':
         return {"action":"allow"}
     if rule_result == 'deny':

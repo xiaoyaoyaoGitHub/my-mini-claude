@@ -273,7 +273,7 @@ class Agent:
                     perm = check_permission(tu.name, tu.input, self.permission_mode)
                     # 需要确认
                     if perm["action"] == "confirm":
-                        print(f"{tu.name},{perm['message']}")
+                        # print(f"{tu.name},{perm['message']}")
                         result = input("  Allow? (y/n): ")
                         print(f"allow result: {result}")
                         # 用户拒绝

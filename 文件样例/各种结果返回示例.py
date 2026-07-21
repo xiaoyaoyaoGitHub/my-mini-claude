@@ -18,4 +18,13 @@ run_shell {'command': 'cd /Users/wangly/Documents/study/pythons/my-mini-claude &
 
 
 """
-
+"""
+sub_rules: ['cd /Users/wangly/Documents/study/pythons/my-mini-claude', 'git status'], 
+sub_pattern: ['cd /Users/wangly/Documents/study/pythons/my-mini-claude', 'git status']
+sub_rules: ['cd /Users/wangly/Documents/study/pythons/my-mini-claude', 'git diff --stat'], 
+sub_pattern: ['cd /Users/wangly/Documents/study/pythons/my-mini-claude', 'git diff --stat']
+sub_rules: ['cd /Users/wangly/Documents/study/pythons/my-mini-claude', 'git status -s'], 
+sub_pattern: ['cd /Users/wangly/Documents/study/pythons/my-mini-claude', 'git status -s']
+sub_rules: ['cd /Users/wangly/Documents/study/pythons/my-mini-claude', 'git diff'], 
+sub_pattern: ['cd /Users/wangly/Documents/study/pythons/my-mini-claude', 'git diff']
+"""
