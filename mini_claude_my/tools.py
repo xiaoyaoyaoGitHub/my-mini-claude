@@ -265,8 +265,19 @@ def check_permission(tool_name:str, inp:dict, permission_mode) -> dict:
 
 # run_bash
 def run_bash(inp) -> str:
-
-    return  ''
+    try:
+        # shell=True 直接字符串执行 有风险
+        result = subprocess.run(inp["command"], shell=True, capture_output=True, text=True, timeout=3000)
+        # 找到匹配
+        if result.returncode == 0:
+            return result.stdout
+        if result.returncode == 1:
+            return "No matches found."
+        return f'command failed: {result.stderr}'
+    except subprocess.TimeoutExpired:
+        return "Command Timeout"
+    except Exception as e:
+        return f"Error:{e}"
 
 
 # 搜索 grep_search
