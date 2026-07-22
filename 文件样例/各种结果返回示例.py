@@ -15,7 +15,7 @@ agent {'description': 'git checkout tools.py', 'prompt': 'Run this command: cd /
 -- mini_claude_my/tools.py\n\nThen verify the file is back to original by running: git diff mini_claude_my/tools.py', 'type': 'general'}
 
 run_shell {'command': 'cd /Users/wangly/Documents/study/pythons/my-mini-claude && git checkout -- mini_claude_my/tools.py'}
-
+read_file {'file_path': '/Users/wangly/Documents/study/pythons/my-mini-claude/mini_claude_my/prompt.py'}
 
 """
 """

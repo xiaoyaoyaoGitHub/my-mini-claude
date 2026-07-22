@@ -274,8 +274,13 @@ def _match_rules(rule, tool_name, inp) -> bool:
     # 获取到大模型中 run_bash 调用的操作
     if tool_name ==  "run_bash":
         value = inp.get("command")
-    pattern = rule["pattern"]
+    # 如果是文件类型的命令 有 file_path
+    elif "file_path" in inp:
+        value = inp["file_path"]
+    else:
+        return False
 
+    pattern = rule["pattern"]
     # 使用 shlex 拆分 rule 与 pattern进行匹配
     sub_rules = split_command(pattern)
     sub_patterns = split_command(value)
@@ -295,13 +300,13 @@ def _check_permission_rules(tool_name:str, inp:dict) -> str | None:
     # 加载本地记录权限文件
     settings_rules = load_permission_rules()
     # print(f"settings_rules: {settings_rules},{inp}")
+    for deny in settings_rules['deny']:
+        if _match_rules(deny, tool_name, inp):
+            return "deny"
     for allow in settings_rules["allow"]:
         if _match_rules(allow, tool_name, inp):
             print(f"命中本地allow规则")
             return "allow"
-    for deny in settings_rules['deny']:
-        if _match_rules(deny, tool_name, inp):
-            return "deny"
     return None
 
 
@@ -309,7 +314,10 @@ def check_permission(tool_name:str, inp:dict, permission_mode) -> dict:
     """Return {"action":"allow/deny/confirm"}"""
     if permission_mode == 'byPassPermissions':
         return {"action":"allow"}
-
+    command = inp.get("command", "")
+    # 拦截  git diff $(rm -rf ~) 拆出来是一段 git diff $(rm -rf ~)，能命中 git diff * 规则被放行
+    if "$(" in command or "`" in command:
+        return {"action": "confirm", "message": command}
     rule_result = _check_permission_rules(tool_name, inp)
     # print(f"rule_result,{rule_result}")
     if rule_result == 'allow':
@@ -321,7 +329,7 @@ def check_permission(tool_name:str, inp:dict, permission_mode) -> dict:
 
     # 拦截危险操作 进行权限确认
     if tool_name == "run_bash":
-        return {"action":"confirm","message":inp.get("command")}
+        return {"action":"confirm","message":command}
     return {"action":"allow"}
 
 
@@ -329,7 +337,7 @@ def check_permission(tool_name:str, inp:dict, permission_mode) -> dict:
 def run_bash(inp) -> str:
     try:
         # shell=True 直接字符串执行 有风险
-        result = subprocess.run(inp["command"], shell=True, capture_output=True, text=True, timeout=3000)
+        result = subprocess.run(inp["command"], shell=True, capture_output=True, text=True, timeout=30)
         # 找到匹配
         if result.returncode == 0:
             return result.stdout

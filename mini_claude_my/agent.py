@@ -274,15 +274,19 @@ class Agent:
                     # 需要确认
                     if perm["action"] == "confirm":
                         # print(f"{tu.name},{perm['message']}")
-                        result = input("  Allow? (y/n): ")
-                        print(f"allow result: {result}")
+                        allow_result = input("  Allow? (y/n): ")
+                        print(f"allow result: {allow_result}")
                         # 用户拒绝
-                        if not result.lower().startswith("y"):
+                        if not allow_result.lower().startswith("y"):
                             tool_results.append({"type":"tool_result","tool_use_id":tu.id, "content":"User denied this action."})
                             continue
                         result = await _execute_tool({"name": tu.name, "input": inp})
                         # 把当前权限内容添加到project_settings
                         record_permission_settings(tu.name, perm["message"])
+                    # 被拒绝
+                    if perm["action"] == "deny":
+                        tool_results.append({"type":"tool_result","tool_use_id":tu.id, "content":"Denied by permission rules."})
+                        continue
                 print_tool_result(tu.name, result)
                 tool_results.append({"type": "tool_result", "tool_use_id": tu.id, "content": result})
             self.current_turns += 1
