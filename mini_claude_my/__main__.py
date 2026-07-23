@@ -80,7 +80,6 @@ async def run_repl(agent:Agent) -> None:
     print_welcome()
     while True:
         print_user_prompt()
-
         try:
             line = input()
         except (EOFError, KeyboardInterrupt):
@@ -93,7 +92,12 @@ async def run_repl(agent:Agent) -> None:
         if inp in ('exit','quit'):
             print('\nBye!Bye!\n')
             break
-        # TODO 开始给 agent 发送信息
+        # REPL command
+        if inp == '/compact':
+            # 会话压缩
+            await agent.compact()
+            continue
+        # 开始给 agent 发送信息
         try:
              await agent.chat(inp)
         except Exception as error:

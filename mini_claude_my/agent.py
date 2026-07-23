@@ -3,8 +3,8 @@ import time
 import asyncio
 from typing import Any
 
-from .ui import print_error, print_assistant_prompt, start_spinner, stop_spinner,print_assistant_thinking,print_cost,print_tool_call,print_tool_result
-from .tools import tool_definitions,CONCURRENCY_SAFE_TOOLS,check_permission, _execute_tool,record_permission_settings
+from .ui import print_error, print_assistant_prompt, start_spinner, stop_spinner,print_assistant_thinking,print_cost,print_tool_call,print_tool_result, print_info
+from .tools import tool_definitions,check_permission, _execute_tool,record_permission_settings
 from .prompt import build_system_prompt
 
 class Agent:
@@ -199,7 +199,6 @@ class Agent:
             print_error(f'{etype}/{code}: {msg}')
             return None
 
-
     # agent 发送 messages
     async def chat(self, user_messages):
         # 将用户信息塞入信息 list
@@ -297,6 +296,42 @@ class Agent:
                     "role":"user",
                     "content": tool_results
                 })
+
+    # 压缩会话
+    async def compact(self) -> None:
+        await self._anthropic_compact()
+        print_info("Conversation compacted.")
+
+    # anthropic compact
+    async def _anthropic_compact(self) -> None:
+        # print(f"_anthropic_message", self._anthropic_messages)
+        # 取最后一条用户信息
+        last_user_message = self._anthropic_messages[-1]
+        # 创建大模型对话，将除最后一条的信息都发给大模型进行总结
+        start_spinner()
+        summary_result =  await self._anthropic_client.messages.create(
+            model = self.model,
+            max_tokens=2048,
+            system="You are a conversation summarizer. Be concise but preserve important details.",
+            messages = [
+                *self._anthropic_messages[:-1],
+                {"role": "user",
+                 "content": "Summarize the conversation so far in a concise paragraph, preserving key decisions, file paths, and context needed to continue the work."},
+            ]
+        )
+        stop_spinner()
+        summary_text = 'No summary available.'
+        for summary in summary_result.content:
+            if summary.type == 'text':
+                summary_text = summary.text
+        self._anthropic_messages = [
+            {"role": "user", "content": f"[Previous conversation summary]\n{summary_text}"},
+            {"role": "assistant",
+             "content": "Understood. I have the context from our previous conversation. How can I continue helping?"},
+        ]
+        if last_user_message["role"] == "user":
+            self._anthropic_messages.append(last_user_message)
+        self.last_input_tokens = 0
 
     @staticmethod # 放到类命名空间的普通函数，不需要访问实例 self 或者 类 cls
     def _block_to_dict(block) -> dict:

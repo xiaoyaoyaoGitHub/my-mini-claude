@@ -59,6 +59,9 @@ def print_assistant_prompt(text) -> None:
     sys.stdout.write(text)
     sys.stdout.flush()
 
+def print_info(message:str) -> None:
+    console.print(f"\n [dim] {message} [/dim] \n",end="")
+
 # 打印 大模型 thinking
 def print_assistant_thinking(thinking):
     console.print(f"[dim]{escape(thinking)}[/dim]", end="")
@@ -89,7 +92,7 @@ def start_spinner() -> None:
     # 否则创建
     def _run():
         frame = 0
-        sys.stdout.write(f"{SPINNER_FRAMES[frame]} thinking...")
+        sys.stdout.write(f"\n {SPINNER_FRAMES[frame]} thinking...")
         sys.stdout.flush()
         # 粘性（sticky）：set() 之后标志位一直是 True，直到有人主动 clear()。所有后续 wait() 立刻返回，不会"错过"信号。
         # is_set() 检查当前标志位
