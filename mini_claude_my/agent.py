@@ -43,6 +43,7 @@ class Agent:
         self.total_output_tokens = 0
         self.last_input_tokens = 0
         self.current_turns = 0 # 记录轮次
+        self.effective_window = 2000 # 窗口预算
 
         # 工具 tools
         self.tools = tool_definitions
@@ -69,6 +70,7 @@ class Agent:
             "messages": self._anthropic_messages,
             "tools": self.tools,
             "system": self._base_system_prompt,
+
 
         }
         if self._thinking_mode in ('adaptive', 'enabled'):
@@ -176,7 +178,7 @@ class Agent:
                             except Exception:
                                 parsed = {}
                             #  parsed: {'pattern': '*'}
-                            # tb:{'id': 'toolu_9adfa024869046df8f0687f6', 'name': 'list_files', 'input_json': '{"pattern": "*"}'}
+                            # tb:{'id': 'tool_9adfa024869046df8f0687f6', 'name': 'list_files', 'input_json': '{"pattern": "*"}'}
                             # print(f"\n parsed: {parsed}, tb:{tb}", end="", flush=True)
                             on_tool_block_complete({
                                 "type":"tool_use",
@@ -206,9 +208,12 @@ class Agent:
             "role": "user",
             "content": user_messages
         })
+
         # 如果不使用工具 可以不需要该循环，如果使用到了工具，需要将工具结果再次添加到 messages中
         # 询问大模型 直到给出结果
         while True:
+            # 计算上下文窗口剩余额度 是否需要压缩上下文
+            await self.check_compact()
             # 保存需要执行的工具
             early_executions:dict[str, asyncio.Task] = {}
             # print(f"_anthropic_messages: {len(self._anthropic_messages)}")
@@ -235,6 +240,7 @@ class Agent:
             # print(f"\n response: {response}")
             # 记录输入输出 token 及时间
             self.last_api_call_time = time.time()
+            # 当前对话上下文大小的最准确的测量值
             self.last_input_tokens = response.usage.input_tokens
             self.total_input_tokens += response.usage.input_tokens
             self.total_output_tokens += response.usage.output_tokens
@@ -297,41 +303,80 @@ class Agent:
                     "content": tool_results
                 })
 
+    # 检测压缩上下文
+    async def check_compact(self):
+        if self.last_input_tokens >= self.effective_window * 0.8:
+            print_info("Context window filling up, compacting conversation...")
+            await self.compact()
+
     # 压缩会话
     async def compact(self) -> None:
-        await self._anthropic_compact()
-        print_info("Conversation compacted.")
+       if await self._anthropic_compact():
+            print_info("Conversation compacted.")
 
     # anthropic compact
-    async def _anthropic_compact(self) -> None:
-        # print(f"_anthropic_message", self._anthropic_messages)
-        # 取最后一条用户信息
-        last_user_message = self._anthropic_messages[-1]
-        # 创建大模型对话，将除最后一条的信息都发给大模型进行总结
-        start_spinner()
-        summary_result =  await self._anthropic_client.messages.create(
-            model = self.model,
-            max_tokens=2048,
-            system="You are a conversation summarizer. Be concise but preserve important details.",
-            messages = [
-                *self._anthropic_messages[:-1],
-                {"role": "user",
-                 "content": "Summarize the conversation so far in a concise paragraph, preserving key decisions, file paths, and context needed to continue the work."},
-            ]
-        )
-        stop_spinner()
-        summary_text = 'No summary available.'
-        for summary in summary_result.content:
-            if summary.type == 'text':
-                summary_text = summary.text
-        self._anthropic_messages = [
-            {"role": "user", "content": f"[Previous conversation summary]\n{summary_text}"},
-            {"role": "assistant",
-             "content": "Understood. I have the context from our previous conversation. How can I continue helping?"},
-        ]
-        if last_user_message["role"] == "user":
-            self._anthropic_messages.append(last_user_message)
-        self.last_input_tokens = 0
+    async def _anthropic_compact(self) -> None | bool:
+       try:
+           # print(f"_anthropic_message", self._anthropic_messages)
+           # 取最后一条用户信息
+           last_user_message = self._anthropic_messages[-1]
+           print_info(f"Last user message: {last_user_message['content']}")
+           keep_last = self.is_plain_user_message(last_user_message)
+           to_summary = self._anthropic_messages[:-1] if keep_last else self._anthropic_messages
+           # 创建大模型对话，将除最后一条的信息都发给大模型进行总结
+           start_spinner()
+           summary_result = await self._anthropic_client.messages.create(
+               model=self.model,
+               max_tokens=2048,
+               tools=self.tools,
+               system="You are a conversation summarizer. Be concise but preserve important details.",
+               messages=[
+                   *to_summary,
+                   {"role": "user",
+                    "content": "Summarize the conversation so far in a concise paragraph, preserving key decisions, file paths, and context needed to continue the work."},
+               ]
+           )
+           stop_spinner()
+           summary_text = 'No summary available.'
+           for summary in summary_result.content:
+               if summary.type == 'text':
+                   summary_text = summary.text
+           print_info(f"Summary text: {summary_text}")
+           self._anthropic_messages = [
+               {"role": "user", "content": f"[Previous conversation summary]\n{summary_text}"},
+               {"role": "assistant",
+                "content": "Understood. I have the context from our previous conversation. How can I continue helping?"},
+           ]
+           if keep_last:
+               self._anthropic_messages.append(last_user_message)
+           else:
+               # 如果是任务途中 补充一条指令继续执行
+               self._anthropic_messages.append({
+                   "role": "user",
+                   "content": "Continue the task described in the summary."
+               })
+           self.last_input_tokens = 0
+       except Exception as e:
+           print_error(f"压缩错误:{e}")
+           return False
+
+    # 判断是普通的用户信息
+    @staticmethod
+    def is_plain_user_message(message) -> bool:
+        """ 根据信息内容判断是否为普通的用户信息 """
+        if message["role"] != "user":
+            return False
+        content = message['content']
+        if isinstance(content, str):
+            return True
+        _is_plain = True
+        # for c in content:
+        #     if c.get("type") == 'tool_result':
+        #         _is_plain = False
+        #         break
+        # return _is_plain
+        # 简写版
+        return not any(c.get("type") == "tool_result" for c in content)
 
     @staticmethod # 放到类命名空间的普通函数，不需要访问实例 self 或者 类 cls
     def _block_to_dict(block) -> dict:

@@ -4,12 +4,13 @@ import json
 import difflib
 import subprocess
 import shlex
+from anthropic.types import ToolParam
 # 并发安全的工具 可以并行执行(只读 无副作用)
 CONCURRENCY_SAFE_TOOLS = {"read_file","list_files","grep_search","web_search"}
 
 # ─── Tool definitions ───────────────────────────────────────
 
-tool_definitions: list[dict] = [
+tool_definitions: list[ToolParam] = [
     {
         "name": "read_file",
         "description": "Read the contents of a file. Returns the file content with line numbers.",
