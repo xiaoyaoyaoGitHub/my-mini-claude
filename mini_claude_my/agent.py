@@ -43,7 +43,7 @@ class Agent:
         self.total_output_tokens = 0
         self.last_input_tokens = 0
         self.current_turns = 0 # 记录轮次
-        self.effective_window = 2000 # 窗口预算
+        self.effective_window = 20000 # 窗口预算
 
         # 工具 tools
         self.tools = tool_definitions
