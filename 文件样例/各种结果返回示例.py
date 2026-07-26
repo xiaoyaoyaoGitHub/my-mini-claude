@@ -47,3 +47,13 @@ content=[
     stop_reason='end_turn', 
     stop_sequence=None, type='message', usage=Usage(cache_creation=None, cache_creation_input_tokens=0, cache_read_input_tokens=0, inference_geo=None, input_tokens=922, output_tokens=417, output_tokens_details=None, server_tool_use=None, service_tier=None, prompt_tokens_details={'cached_tokens': 0}))
 """
+
+"""
+🔨 create_skill {'name': 'summary', 'description': '总结当前工作目录的变更/功能点，查看 git diff 
+和最近提交，输出结构化总结。用户说"总结"、"汇总"、"summary"、"变更"、"改了什么"时触发', 'scope': 'project', 'instructions': 
+'你是一个总结助手。请按以下步骤总结当前项目的变更：\n\n1. 运行 `git status` 查看当前变更状态\n2. 运行 `git diff --stat` 查看变更文件概览\n3. 运行 `git 
+diff` 查看详细变更内容（如果有未暂存变更）\n4. 运行 `git diff --cached --stat` 查看暂存区变更\n5. 查看最近 5 条提交信息：`git log --oneline 
+-5`\n\n然后输出结构化总结，格式如下：\n\n## 变更总结\n\n### 未提交变更（工作区）\n- 列出修改的文件及变更类型（新增/修改/删除）\n- 
+简要描述每个文件改了啥\n\n### 已暂存变更（暂存区）\n- 同上\n\n### 最近提交\n- 列出最近提交的概要\n\n### 整体概述\n- 这次改动的核心目的是什么\n- 
+涉及的主要模块/功能点'}
+"""

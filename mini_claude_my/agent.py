@@ -320,7 +320,7 @@ class Agent:
            # print(f"_anthropic_message", self._anthropic_messages)
            # 取最后一条用户信息
            last_user_message = self._anthropic_messages[-1]
-           print_info(f"Last user message: {last_user_message['content']}")
+           # print_info(f"Last user message: {last_user_message['content']}")
            keep_last = self.is_plain_user_message(last_user_message)
            to_summary = self._anthropic_messages[:-1] if keep_last else self._anthropic_messages
            # 创建大模型对话，将除最后一条的信息都发给大模型进行总结

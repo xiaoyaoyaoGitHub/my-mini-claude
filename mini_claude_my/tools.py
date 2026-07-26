@@ -97,6 +97,40 @@ tool_definitions: list[ToolParam] = [
         },
     },
     {
+        "name": "create_skill",
+         "description": (
+              "Create a Claude Code style skill: a reusable instruction set saved as "
+              "<skills_dir>/<name>/SKILL.md. The skill can later be invoked as /<name>. "
+              "Use when the user wants to save a repeatable workflow, prompt template, "
+              "or command shortcut. The description field determines when the skill is "
+              "auto-triggered, so make it specific: what it does + when to use + "
+              "keywords the user would say."
+          ),
+        "input_schema": {
+              "type": "object",
+              "properties": {
+                  "name": {
+                      "type": "string",
+                      "description": "Skill name in kebab-case (lowercase letters, digits, hyphens), e.g. 'test-compact'. Used as directory name and/command name.",
+                  },
+                  "description": {
+                      "type": "string",
+                      "description": "One-line trigger description: what it does + when to use it + user keywords. This is what decides auto-invocation.",
+                  },
+                  "instructions": {
+                      "type": "string",
+                      "description": "Markdown body of SKILL.md: step-by-step instructions for the agent. May reference $ARGUMENTS / $1 / $2 for userarguments.",
+                  },
+                  "scope": {
+                      "type": "string",
+                      "enum": ["user", "project"],
+                      "description": "user = ~/.my_claude/skills/ (all projects); project = ./.my_claude/skills/ (this repo only). Default: project",
+                  },
+              },
+              "required": ["name", "description", "instructions"],
+          },
+    },
+    {
         "name": "web_fetch",
         "description": "Fetch a URL and return its content as text. For HTML pages, tags are stripped to return readable text. For JSON/text responses, content is returned directly.",
         "input_schema": {
@@ -161,6 +195,8 @@ async def _execute_tool(block):
         return grep_search(block["input"])
     if block["name"] == "run_bash":
         return run_bash(block["input"])
+    if block["name"] == "create_skill":
+        return create_skill(block["input"])
 
     return f"unknow tool: {block['name']}"
 
@@ -285,7 +321,7 @@ def _match_rules(rule, tool_name, inp) -> bool:
     # 使用 shlex 拆分 rule 与 pattern进行匹配
     sub_rules = split_command(pattern)
     sub_patterns = split_command(value)
-    print(f"sub_rules: {sub_rules}, sub_pattern: {sub_patterns}")
+    # print(f"sub_rules: {sub_rules}, sub_pattern: {sub_patterns}")
     for sub_pattern in sub_patterns:
         matched = False
         for sub_rule in sub_rules:
@@ -397,6 +433,28 @@ def grep_search(inp) -> str:
     return f"Error: {result.stderr.strip()}"
 
 
+# 创建 skill
+def create_skill(inp) -> str:
+    # 默认写入到当前启动目录下
+    skill_path = Path.cwd() / ".my_claude" / "skills"
+    skill_path.parent.mkdir(parents=True, exist_ok=True)
+    skill_name = inp["name"]
+    skill_description = inp["description"]
+    skill_instructions = inp["instructions"]
+    skill_dir = skill_path / skill_name
+    skill_file = skill_dir / "SKILL.md"
+    if skill_file.exists():
+        return f"Error: skill '{skill_name}' already exists at {skill_file}. Delete it first or choose another name."
+    content = (
+        "---\n"
+        f"name:{skill_name}\n"
+        f"description:{skill_description}\n"
+        "---\n"
+        f"{skill_instructions.strip()}\n"
+    )
+    skill_file.parent.mkdir(parents=True, exist_ok = True)
+    skill_file.write_text(content, encoding="utf-8")
+    return f"Skill created: {skill_file}\nInvoke with /{skill_name} (restart session to take effect)."
 # edit_files {'file_path': '/Users/wangly/Documents/study/pythons/my-mini-claude/test.txt', 'old_string': 'include = ["mini_claude*"]', 'new_string': 'include = ["mini_claude*"]\n\n你好
 # 王豆豆'}
 

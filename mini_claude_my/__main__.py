@@ -11,6 +11,7 @@ load_dotenv() # 用于读取.env中的配置变量
 
 from .ui import print_error,print_welcome,print_user_prompt
 from .agent import Agent
+from .skills import discover_skills
 
 # 命令行参数解析
 def parse_args() -> argparse.Namespace:
@@ -96,6 +97,17 @@ async def run_repl(agent:Agent) -> None:
         if inp == '/compact':
             # 会话压缩
             await agent.compact()
+            continue
+        # 查看 skill
+        if inp == "/skills":
+            skills =  discover_skills()
+            if len(skills) <= 0:
+                print(f"No skills found. Add skills to .my_claude/skills/<name>/SKILL.md")
+            else:
+                # print(f"Found {len(skills)} skills")
+                for d in skills:
+                    tag = f"/{d.name}"
+                    print(f"{tag}:({d.description})")
             continue
         # 开始给 agent 发送信息
         try:
