@@ -201,6 +201,16 @@ class Agent:
             print_error(f'{etype}/{code}: {msg}')
             return None
 
+    # 工具分流执行 如果是 skill 需要开辟一个 subagent 执行
+    async def _execute_tool_call(self, tool_block) -> str:
+        tool_name = tool_block['name']
+        if tool_name == "skill":
+            # TODO 工具调用执行结果
+            pass
+        else:
+            # 都是工具
+           return await _execute_tool(tool_block)
+
     # agent 发送 messages
     async def chat(self, user_messages):
         # 将用户信息塞入信息 list
@@ -230,7 +240,7 @@ class Agent:
                 prem = check_permission(tool_block["name"], tool_block['input'], self.permission_mode)
                 if prem['action'] == "allow":
                     # 创建 task 每个 task 中触发工具调用执行
-                    task = asyncio.create_task(_execute_tool(tool_block))
+                    task = asyncio.create_task(self._execute_tool_call(tool_block))
                     # 并将 task 保存到 early_executions中
                     early_executions[tool_block['id']] = task
 
@@ -285,7 +295,7 @@ class Agent:
                         if not allow_result.lower().startswith("y"):
                             tool_results.append({"type":"tool_result","tool_use_id":tu.id, "content":"User denied this action."})
                             continue
-                        result = await _execute_tool({"name": tu.name, "input": inp})
+                        result = await self._execute_tool_call({"name": tu.name, "input": inp})
                         # 把当前权限内容添加到project_settings
                         record_permission_settings(tu.name, perm["message"])
                     # 被拒绝

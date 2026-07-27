@@ -197,7 +197,6 @@ async def _execute_tool(block):
         return run_bash(block["input"])
     if block["name"] == "create_skill":
         return create_skill(block["input"])
-
     return f"unknow tool: {block['name']}"
 
 
@@ -447,8 +446,8 @@ def create_skill(inp) -> str:
         return f"Error: skill '{skill_name}' already exists at {skill_file}. Delete it first or choose another name."
     content = (
         "---\n"
-        f"name:{skill_name}\n"
-        f"description:{skill_description}\n"
+        f"name: {skill_name}\n"
+        f"description: {skill_description}\n"
         "---\n"
         f"{skill_instructions.strip()}\n"
     )

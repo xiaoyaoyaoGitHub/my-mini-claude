@@ -39,10 +39,22 @@ def discover_skills() -> list[SkillDefinition]:
             _skills[skill_name] = SkillDefinition(
                 name = skill_name,
                 description = meta.get("description") or "",
-                when_to_use = meta.get("description") or "",
                 prompt_template= raw.body,
                 skill_dir= skill_dir,
             )
     # print(f"found {len(_skills)} skills")
     _cache_skills = list(_skills.values())
     return _cache_skills
+
+# 通过名称匹配 skill
+def get_skill_by_name(name:str) -> SkillDefinition | None:
+    for s in discover_skills():
+        if s.name == name:
+            return s
+    return None
+
+# 根据 skill 整合提示词
+def resolve_skill_prompt(skill:SkillDefinition, args) -> str:
+    prompt = skill.prompt_template
+    print(f"resolve prompt:{prompt}")
+    return prompt

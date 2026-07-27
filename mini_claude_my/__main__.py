@@ -11,7 +11,7 @@ load_dotenv() # 用于读取.env中的配置变量
 
 from .ui import print_error,print_welcome,print_user_prompt
 from .agent import Agent
-from .skills import discover_skills
+from .skills import discover_skills,get_skill_by_name,resolve_skill_prompt
 
 # 命令行参数解析
 def parse_args() -> argparse.Namespace:
@@ -108,6 +108,21 @@ async def run_repl(agent:Agent) -> None:
                 for d in skills:
                     tag = f"/{d.name}"
                     print(f"{tag}:({d.description})")
+            continue
+        # 执行 skill
+        if inp.startswith("/"):
+            # 找到空格
+            space_idx = inp.find(" ")
+            # 解析 skill的名字
+            skill_name = inp[1:space_idx] if space_idx > 0 else inp[1:]
+            # 解析参数
+            args = inp[space_idx + 1:] if space_idx > 0 else ""
+            exist_skill = get_skill_by_name(skill_name)
+            # 如果存在 对应的 skill
+            if exist_skill:
+                # print(f"Skill {exist_skill},{args}")
+                prompt = resolve_skill_prompt(exist_skill,args)
+                await agent.chat(prompt)
             continue
         # 开始给 agent 发送信息
         try:
