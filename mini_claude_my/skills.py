@@ -1,4 +1,6 @@
 from pathlib import Path
+import shlex
+import re
 from dataclasses import dataclass
 from .formatter import parse_frontmatter
 
@@ -56,5 +58,18 @@ def get_skill_by_name(name:str) -> SkillDefinition | None:
 # 根据 skill 整合提示词
 def resolve_skill_prompt(skill:SkillDefinition, args) -> str:
     prompt = skill.prompt_template
-    print(f"resolve prompt:{prompt}")
+    # print(f"resolve prompt:{prompt}")
+    # 解析参数
+    try:
+        args_list = shlex.split(args)
+    except Exception as e:
+        args_list = args.split()
+    # 判断模板中是否有需要替换的位置 关键字 $ARGUMENTS
+    has_placeholder = "$ARGUMENTS" in prompt or re.search(r"\$\d", prompt)
+
+    # TODO 如果在模板中需要有参数进行替换 目前没有看到 等看到有合适的 skill再添加
+
+    # 提示词模板中没有参数可以替换 直接追接到提示词后面
+    if args and not has_placeholder:
+        prompt += f"\n\nARGUMENTS:{args}"
     return prompt
