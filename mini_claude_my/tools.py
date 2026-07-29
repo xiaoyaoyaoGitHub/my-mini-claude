@@ -126,6 +126,17 @@ tool_definitions: list[ToolParam] = [
                       "enum": ["user", "project"],
                       "description": "user = ~/.my_claude/skills/ (all projects); project = ./.my_claude/skills/ (this repo only). Default: project",
                   },
+                  "context": {
+                      "type": "string",
+                      "enum": ["inline", "subagent"],
+                      "description": (
+                          "Where the skill runs. inline (default) = in the current conversation, so every "
+                          "intermediate step stays visible and the user can ask follow-up questions about it. "
+                          "subagent = in an isolated context that returns only its final answer. "
+                          "Choose subagent when the skill reads far more than it reports (auditing many files, "
+                          "searching a large tree) and the intermediate material would only bloat the conversation."
+                      ),
+                  },
               },
               "required": ["name", "description", "instructions"],
           },
@@ -444,10 +455,14 @@ def create_skill(inp) -> str:
     skill_file = skill_dir / "SKILL.md"
     if skill_file.exists():
         return f"Error: skill '{skill_name}' already exists at {skill_file}. Delete it first or choose another name."
+    # 默认值不落盘：文件里出现的字段都是有意义的偏离
+    skill_context = inp.get("context") or "inline"
+    context_line = f"context: {skill_context}\n" if skill_context != "inline" else ""
     content = (
         "---\n"
         f"name: {skill_name}\n"
         f"description: {skill_description}\n"
+        f"{context_line}"
         "---\n"
         f"{skill_instructions.strip()}\n"
     )

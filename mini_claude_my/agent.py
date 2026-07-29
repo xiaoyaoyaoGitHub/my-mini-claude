@@ -32,7 +32,8 @@ class Agent:
         self.base_url = base_url
         self.api_key = api_key
         self.thinking = thinking
-        self._base_system_prompt = custom_system_prompt or build_system_prompt()
+        # 补充系统提示词 不然 subagent容易丢失规范
+        self._base_system_prompt = build_system_prompt() + "\n\n" + (custom_system_prompt if custom_system_prompt is not None else "")
         # 设置思考模式
         self._thinking_mode = self._resolve_thinking_mode()
         # 创建 anthropic 消息 list 后续可以对对话进行压缩
@@ -220,6 +221,9 @@ class Agent:
            result = execute_skill(inp)
            if not result:
                return f"Unknown skill: {inp.get('skill_name', '')}"
+           # 如果不需要开启子进程 直接返回提示回灌 主 agent 自己照着做
+           if result["context"] == "inline":
+               return result["prompt"]
            # 开始创建subagent
            print_subagent_start("skill", inp.get("skill_name", ''))
            sub_agent = Agent(

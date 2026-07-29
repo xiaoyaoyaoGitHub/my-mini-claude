@@ -34,13 +34,14 @@ def discover_skills() -> list[SkillDefinition]:
         # print(f"dir: {skill_dir}")
         if skill_dir.is_dir():
             skill_file = skill_dir / "SKILL.md"
-            context = skill_file.read_text()
-            raw = parse_frontmatter(context)
+            raw_text = skill_file.read_text()
+            raw = parse_frontmatter(raw_text)
             meta = raw.meta
             skill_name = meta.get("name") or "unknow"
             _skills[skill_name] = SkillDefinition(
                 name = skill_name,
                 description = meta.get("description") or "",
+                context=meta.get("context") or "inline",
                 prompt_template= raw.body,
                 skill_dir= skill_dir,
             )
