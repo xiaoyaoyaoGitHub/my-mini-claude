@@ -76,6 +76,16 @@ def print_cost(input_tokens: int, output_tokens: int) -> None:
     console.print(f"\n [dim] Tokens: {cost_in:.6f} in / {cost_out:.6f} out,Total:~${total_cost:.4f} [/dim]\n")
     console.rule(style="grey50")
 
+# ---- subagent----
+def print_subagent_start(subagent, name) -> None:
+    console.print(f"\n  [magenta]┌─ Sub-agent {escape(subagent)}: {name}[/magenta]")
+
+def print_subagent_end(subagent, name) -> None:
+    console.print(f"  [magenta]└─ Sub-agent {escape(subagent)}:{name} completed[/magenta]")
+
+
+
+
 # 开始thinking
 SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 # threading.Thread 一个独立的执行流 跑目标函数

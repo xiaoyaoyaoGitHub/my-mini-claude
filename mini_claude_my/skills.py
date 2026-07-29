@@ -29,7 +29,7 @@ def discover_skills() -> list[SkillDefinition]:
     # 如果不是文件夹
     if not skills_path.is_dir():
         return _skills
-    # TODO 枚举文件夹下的 skills
+    # 枚举文件夹下的 skills
     for skill_dir in skills_path.iterdir():
         # print(f"dir: {skill_dir}")
         if skill_dir.is_dir():
@@ -55,7 +55,21 @@ def get_skill_by_name(name:str) -> SkillDefinition | None:
             return s
     return None
 
-# 根据 skill 整合提示词
+# 整合 skill  message
+# {'args': '__main__.py', 'skill_name': 'summary'}
+def execute_skill(inp) -> dict | None:
+    skill_name = inp["skill_name"]
+    skill = get_skill_by_name(skill_name)
+    args = inp.get("args",'')
+    if not skill:
+        return None
+    return {
+        "prompt": resolve_skill_prompt(skill, args),
+        "allowed_tools": skill.allowed_tools,
+        "context": skill.context
+    }
+
+# 根据 skill 整合提示词模板
 def resolve_skill_prompt(skill:SkillDefinition, args) -> str:
     prompt = skill.prompt_template
     # print(f"resolve prompt:{prompt}")

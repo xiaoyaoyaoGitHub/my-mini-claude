@@ -86,7 +86,7 @@ tool_definitions: list[ToolParam] = [
     },
     {
         "name": "skill",
-        "description": "Invoke a registered skill by name. Skills are prompt templates loaded from .claude/skills/. Returns the skill's resolved prompt to follow.",
+        "description": "Invoke a registered skill by name. Skills are prompt templates loaded from .my_claude/skills/. Returns the skill's resolved prompt to follow.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -341,7 +341,7 @@ def _check_permission_rules(tool_name:str, inp:dict) -> str | None:
             return "deny"
     for allow in settings_rules["allow"]:
         if _match_rules(allow, tool_name, inp):
-            print(f"命中本地allow规则")
+            # print(f"命中本地allow规则")
             return "allow"
     return None
 

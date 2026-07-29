@@ -3,7 +3,7 @@ import time
 import asyncio
 from typing import Any
 
-from .ui import print_error, print_assistant_prompt, start_spinner, stop_spinner,print_assistant_thinking,print_cost,print_tool_call,print_tool_result, print_info
+from .ui import print_error, print_assistant_prompt, start_spinner, stop_spinner,print_assistant_thinking,print_cost,print_tool_call,print_tool_result, print_info, print_subagent_start, print_subagent_end
 from .tools import tool_definitions,check_permission, _execute_tool,record_permission_settings
 from .prompt import build_system_prompt
 
@@ -23,6 +23,8 @@ class Agent:
             base_url: str | None = None,
             api_key: str | None = None,
             thinking: bool = False,
+            is_sub_agent: bool = False,
+            custom_system_prompt: str | None = None
 
     ):
         self.permission_mode = permission_mode
@@ -30,7 +32,7 @@ class Agent:
         self.base_url = base_url
         self.api_key = api_key
         self.thinking = thinking
-        self._base_system_prompt = build_system_prompt()
+        self._base_system_prompt = custom_system_prompt or build_system_prompt()
         # 设置思考模式
         self._thinking_mode = self._resolve_thinking_mode()
         # 创建 anthropic 消息 list 后续可以对对话进行压缩
@@ -43,8 +45,10 @@ class Agent:
         self.total_output_tokens = 0
         self.last_input_tokens = 0
         self.current_turns = 0 # 记录轮次
-        self.effective_window = 20000 # 窗口预算
-
+        self.effective_window = 200000 # 窗口预算
+        # 标识子 agent
+        self._sub_agent = is_sub_agent
+        self._output_buffer:list[str] | None = [] if is_sub_agent else None # 记录子 agent 的结果
         # 工具 tools
         self.tools = tool_definitions
 
@@ -55,6 +59,14 @@ class Agent:
         # todo 这里处理支持 thinking 的模型
         # todo 这里处理支持 自适应的模型 adaptive
         return "enabled"
+
+    # 区分 subagent 与 agent subagent 要收集 不打印
+    def _omit_text(self,text,fn) -> None:
+        # print(f"_omit_text,{self._output_buffer}")
+        if self._output_buffer is not None:
+            self._output_buffer.append(text)
+        else:
+            fn(text)
 
     # 发送 anthropic_message_stream
     async def _call_anthropic_stream(self,on_tool_block_complete=None):
@@ -70,8 +82,6 @@ class Agent:
             "messages": self._anthropic_messages,
             "tools": self.tools,
             "system": self._base_system_prompt,
-
-
         }
         if self._thinking_mode in ('adaptive', 'enabled'):
             create_params['thinking'] = {
@@ -93,8 +103,7 @@ class Agent:
           - 还有 stream_events 能拿到更细的事件（message_start / content_block_delta / message_stop 等），text_stream 是它的"只要文本"的便捷包装
         """
         try:
-            # 开始 thinking 动画
-            start_spinner()
+
             # 首字输出
             first_text = True
             first_answer = True
@@ -140,7 +149,6 @@ class Agent:
                     if getattr(event, 'type') == 'content_block_delta':
                         # 内容块增量
                         delta = event.delta
-
                         # 文本增量
                         if getattr(delta, 'type') == 'text_delta':
                             if first_text:
@@ -151,14 +159,17 @@ class Agent:
                                 print('\n', end="", flush=True)
                                 first_answer = False
                             # 最终的内容在此处打印
-                            print_assistant_prompt(delta.text)
+                            self._omit_text(delta.text,print_assistant_prompt)
                         # 思考增量
                         elif getattr(delta, 'type') == 'thinking_delta':
                             if first_text:
                                 stop_spinner()
-                                print_assistant_thinking('\n [thinking...]')
+                                print_assistant_prompt("\n [thinking...]")
+                                # self._omit_text('\n [thinking...]', print_assistant_prompt)
                                 first_text = False
-                            # print_assistant_thinking(delta.thinking)
+                            # 思考的内容可以不用subagent可以不用收集
+                            # self._omit_text(delta.thinking,print_assistant_thinking)
+                            print_assistant_thinking(delta.thinking)
                         # json增量
                         elif getattr(delta, 'type') == 'input_json_delta':
                             # 收集 tool 入参
@@ -201,12 +212,46 @@ class Agent:
             print_error(f'{etype}/{code}: {msg}')
             return None
 
+    # 执行 skill 调用
+    async def _execute_skill(self, block) -> str:
+       try:
+           inp = block["input"]
+           from .skills import execute_skill
+           result = execute_skill(inp)
+           if not result:
+               return f"Unknown skill: {inp.get('skill_name', '')}"
+           # 开始创建subagent
+           print_subagent_start("skill", inp.get("skill_name", ''))
+           sub_agent = Agent(
+                api_key=self.api_key,
+                base_url=self.base_url,
+                permission_mode=self.permission_mode,
+                model=self.model,
+                is_sub_agent=True,
+                custom_system_prompt = result["prompt"]
+            )
+           # 剔除subagent中 skill 的 tool 防止无限套娃
+           sub_agent.tools = [ tool for tool in sub_agent.tools if tool["name"] != "skill"  ]
+           await sub_agent.chat(inp.get("args") or "Execute this skill task.")
+           text = "".join(sub_agent._output_buffer)
+           # print(f"sub_result:{''.join(sub_agent._output_buffer)}")
+           # print(f"发送后：{sub_agent.total_input_tokens},{sub_agent.total_output_tokens}" )
+           # 将 token累加到主 agent 中
+           self.total_input_tokens += sub_agent.total_input_tokens
+           self.total_output_tokens += sub_agent.total_output_tokens
+           # subagent结束
+           print_subagent_end("skill", inp.get("skill_name", ''))
+           return text or "(Skill produced no output)"
+       except Exception as e:
+           print(f"execute skill :{e}")
+           return f"Skill execution failed: {e}"
+
     # 工具分流执行 如果是 skill 需要开辟一个 subagent 执行
     async def _execute_tool_call(self, tool_block) -> str:
         tool_name = tool_block['name']
         if tool_name == "skill":
             # TODO 工具调用执行结果
-            pass
+            return await self._execute_skill(tool_block)
         else:
             # 都是工具
            return await _execute_tool(tool_block)
@@ -222,6 +267,11 @@ class Agent:
         # 如果不使用工具 可以不需要该循环，如果使用到了工具，需要将工具结果再次添加到 messages中
         # 询问大模型 直到给出结果
         while True:
+
+            # 开始 thinking 动画
+            if not self._sub_agent:
+                start_spinner()
+
             # 计算上下文窗口剩余额度 是否需要压缩上下文
             await self.check_compact()
             # 保存需要执行的工具
@@ -262,7 +312,8 @@ class Agent:
             tool_uses = [ t for t in response.content if t.type == 'tool_use']
             # 如果没有工具调用 打印总体的花费 并中断循环
             if not tool_uses:
-                print_cost(self.total_input_tokens, self.total_output_tokens)
+                if not self._sub_agent:
+                    print_cost(self.total_input_tokens, self.total_output_tokens)
                 break
             # 执行工具
             tool_results:list[dict] = []
@@ -305,7 +356,9 @@ class Agent:
                 print_tool_result(tu.name, result)
                 tool_results.append({"type": "tool_result", "tool_use_id": tu.id, "content": result})
             self.current_turns += 1
-            stop_spinner()
+            # subagent不触发
+            if not self._sub_agent:
+                stop_spinner()
             # 如果工具有返回结果，需要最后添加到 messages，不然下一轮对话大模型认为调用工具没有收到回复
             if tool_results:
                 self._anthropic_messages.append({
