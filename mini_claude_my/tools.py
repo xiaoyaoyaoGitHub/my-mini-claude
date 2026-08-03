@@ -83,13 +83,28 @@ tool_definitions: list[ToolParam] = [
     },
     {
         "name": "grep_search",
-        "description": "Search for a pattern in files. Returns matching lines with file paths and line numbers.",
+        "description": (
+            "Search for a pattern in files. Returns matching lines with file paths and line numbers. "
+            "By default returns up to 200 matches. "
+            "Use offset/limit to page through large result sets."),
         "input_schema": {
             "type": "object",
             "properties": {
                 "pattern": {"type": "string", "description": "The regex pattern to search for"},
                 "path": {"type": "string", "description": "Directory or file to search in. Defaults to current directory."},
                 "include": {"type": "string", "description": 'File glob pattern to include (e.g., "*.ts", "*.py")'},
+                "offset": {
+                    "type": "integer",
+                    "description": "Zero-based index of the first match to return. Default: 0. Use to skip past matches you've already seen.",
+                    "minimum": 0,
+                    "default": 0
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of matches to return. Default: 200. Lower this for very broad patterns.",
+                    "minimum": 1,
+                    "default": 200
+                }
             },
             "required": ["pattern"],
         },
@@ -452,14 +467,19 @@ def grep_search(inp) -> str:
     if result.returncode == 1:
         return "No matches found"
     if result.returncode == 0:
-        # print("grep_search_result",result.stdout.split("\n"))
+        # 分页读取
+        limit = inp.get('limit',200)
+        offset = inp.get('offset',0)
         lines =[l for l in result.stdout.split("\n") if l]
-        # for l in result.stdout.split("\n"):
-        #     print(f"stdout: {l}")
-        content = '\n'.join(lines[:100])
+        end = min(offset + limit, len(lines))
+        content = '\n'.join(lines[offset:end])
         # 防止内容过多 上下文撑爆
-        if len(lines) > 100:
-            return f"{content}, more than {len(lines)-100} lines matched"
+        if len(lines) > end:
+            content += (
+                  f"\n\n[共 {len(lines)} 条匹配，已展示第 {offset+1}-{end} 条。"
+                  f"还有 {len(lines) - end} 条，可用 offset={end} 继续；"
+                  f"或缩小 pattern/path/include 重新搜索]"
+              )
         return content
     # 如果错误 返回给模型错误结果
     return f"Error: {result.stderr.strip()}"
@@ -563,7 +583,7 @@ def list_files(inp) -> str:
 # read_files 新增分页读取
 def read_files(inp) -> str:
    try:
-       limit = inp.get("limit",2000)
+       limit = inp.get("limit",200)
        offset = inp.get("offset",0)
        content = Path(inp['file_path']).read_text(encoding="utf-8")
        context_all = content.splitlines()
