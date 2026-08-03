@@ -13,11 +13,33 @@ CONCURRENCY_SAFE_TOOLS = {"read_file","list_files","grep_search","web_search"}
 tool_definitions: list[ToolParam] = [
     {
         "name": "read_file",
-        "description": "Read the contents of a file. Returns the file content with line numbers.",
+        "description":  (
+              "Read the contents of a file. Returns the file content with line numbers. "
+              "By default reads up to 2000 lines starting from line 0 (the beginning). "
+              "Use offset/limit to page through large files."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "file_path": {"type": "string", "description": "The path to the file to read"},
+                 "offset": {
+                    "type": "integer",
+                    "description": (
+                      "Zero-based line number to start reading from. "
+                      "Default: 0. Use a higher offset to skip past lines you've already seen."
+                          ),
+                          "minimum": 0,
+                          "default": 0
+                      },
+                      "limit": {
+                          "type": "integer",
+                          "description": (
+                              "Maximum number of lines to return. "
+                              "Default: 2000. Lower this for very large files to avoid truncation."
+                          ),
+                          "minimum": 1,
+                          "default": 2000
+                 }
             },
             "required": ["file_path"],
         },
@@ -538,15 +560,22 @@ def list_files(inp) -> str:
         return "当前目录没有可以查看的文件"
     return "\n".join(files)
 
-# read_files
+# read_files 新增分页读取
 def read_files(inp) -> str:
    try:
+       limit = inp.get("limit",2000)
+       offset = inp.get("offset",0)
        content = Path(inp['file_path']).read_text(encoding="utf-8")
+       context_all = content.splitlines()
+       end = min(offset + limit, len(context_all))
+       lines = context_all[offset:end]
        # print(f"read_files content: {content}")
-       lines = content.split("\n")
        # enumerate() 返回下标与值（0,"a"）(1,"b")...
        # {i+1:4d} :d是十进制整数  4 = 占 4 个位置的空字符  右对齐补空格
-       lines_with_numbers = (f"{i + 1:4d} | {line}" for i, line in enumerate(lines))
-       return "\n".join(lines_with_numbers)
+       lines_with_numbers = (f"{i + 1:4d} | {line}" for i, line in enumerate(lines, start=offset))
+       out = "\n".join(lines_with_numbers)
+       if end < len(context_all):
+            out += f"\n\n[... 省略 {len(context_all) - end} 行，可用 offset={end} 继续读]"
+       return out
    except Exception as e:
        return f"Error read_file:{e}"

@@ -2,6 +2,7 @@ import anthropic
 import time
 import asyncio
 from typing import Any
+from pathlib import Path
 
 from .ui import print_error, print_assistant_prompt, start_spinner, stop_spinner,print_assistant_thinking,print_cost,print_tool_call,print_tool_result, print_info, print_subagent_start, print_subagent_end
 from .tools import tool_definitions,check_permission, _execute_tool,record_permission_settings
@@ -260,6 +261,26 @@ class Agent:
             # 都是工具
            return await _execute_tool(tool_block)
 
+    # 检测工具返回结果是否长
+    def _check_large_result(self,tool_name:str,result:str) -> str:
+        THRESHOLD = 20 * 1024 # 阈值
+        if len(result.encode()) <= THRESHOLD:
+            return result
+        # 设置保存工具结果
+        tool_result_path = Path.cwd() / ".my_claude" / "tools_results"
+        # 创建目录
+        tool_result_path.mkdir(parents=True, exist_ok=True)
+        filename = f"{int(time.time() * 1000)}-{tool_name}.txt"
+        file_path = tool_result_path / filename
+        file_path.write_text(result, encoding="utf-8")
+        file_size = len(result.encode()) / 1024
+
+        return (
+            f"[Result too large ({file_size:.1f} KB). "
+            f"Full output saved to {file_path}. "
+            f"You can use read_file to see the full result.]\n\n"
+        )
+
     # agent 发送 messages
     async def chat(self, user_messages):
         # 将用户信息塞入信息 list
@@ -357,6 +378,8 @@ class Agent:
                     if perm["action"] == "deny":
                         tool_results.append({"type":"tool_result","tool_use_id":tu.id, "content":"Denied by permission rules."})
                         continue
+                # todo 如果工具结果调用太长，写入到本地文件中 防止上下文暴增
+                result = self._check_large_result(tu.name,result)
                 print_tool_result(tu.name, result)
                 tool_results.append({"type": "tool_result", "tool_use_id": tu.id, "content": result})
             self.current_turns += 1
