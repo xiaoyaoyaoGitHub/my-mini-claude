@@ -3,10 +3,12 @@ import time
 import asyncio
 from typing import Any
 from pathlib import Path
+import uuid
 
 from .ui import print_error, print_assistant_prompt, start_spinner, stop_spinner,print_assistant_thinking,print_cost,print_tool_call,print_tool_result, print_info, print_subagent_start, print_subagent_end
 from .tools import tool_definitions,check_permission, _execute_tool,record_permission_settings
 from .prompt import build_system_prompt
+from .session import save_session
 
 class Agent:
     # * 是 Python 3 的"关键字参数分界符"：
@@ -53,6 +55,9 @@ class Agent:
         self._output_buffer:list[str] | None = [] if is_sub_agent else None # 记录子 agent 的结果
         # 工具 tools
         self.tools = tool_definitions
+        # 创建 session_id
+        self.session_id = uuid.uuid4().hex[:8]
+        self.session_start_time = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
     # 设定思考模式
     def _resolve_thinking_mode(self):
@@ -263,7 +268,7 @@ class Agent:
 
     # 检测工具返回结果是否长
     def _check_large_result(self,tool_name:str,result:str) -> str:
-        THRESHOLD = 20 * 1024 # 阈值
+        THRESHOLD = 80 * 1024 # 阈值
         if len(result.encode()) <= THRESHOLD:
             return result
         # 设置保存工具结果
@@ -393,6 +398,25 @@ class Agent:
                     "content": tool_results
                 })
 
+        # 保存会话
+        self._auto_save()
+
+
+    # 恢复会话
+    def restore_session(self, messages) -> None:
+        self._anthropic_messages = messages
+    # 自动保存
+    def _auto_save(self) -> None:
+        save_session(self.session_id,{
+            "metadata":{
+                "id":self.session_id,
+                "model":self.model,
+                "cwd":str(Path.cwd()),
+                "startTime":self.session_start_time,
+                "messageCount":len(self._anthropic_messages)
+            },
+            "anthropicMessages": self._anthropic_messages
+        })
     # 检测压缩上下文
     async def check_compact(self):
         if self.last_input_tokens >= self.effective_window * 0.8:

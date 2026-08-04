@@ -6,12 +6,14 @@ import os
 import sys
 import asyncio
 import signal
+from .session import load_session
 from dotenv import load_dotenv
 load_dotenv() # 用于读取.env中的配置变量
 
 from .ui import print_error,print_welcome,print_user_prompt
 from .agent import Agent
 from .skills import discover_skills,get_skill_by_name,resolve_skill_prompt
+from .session import get_latest_session_id
 
 # 命令行参数解析
 def parse_args() -> argparse.Namespace:
@@ -196,6 +198,16 @@ Examples:
         model=model,
         thinking=args.thinking,
     )
+
+    # 会话回复
+    if args.resume:
+        # 加载本地会话 session
+        latest_session_id = get_latest_session_id()
+        if latest_session_id:
+            data = load_session(latest_session_id)
+            agent.restore_session(data["anthropicMessages"])
+        else:
+            print("没有可加载的会话")
     # 开启 REPL
     # asyncio.run(coro, *, debug=False) 是 Python 3.7+ 提供的"程序入口"
     # 创建事件循环、跑一个协程到结束、清理、关循环，全自动一条龙
