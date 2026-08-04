@@ -399,12 +399,14 @@ class Agent:
                 })
 
         # 保存会话
-        self._auto_save()
+        if not self._sub_agent:
+            self._auto_save()
 
 
     # 恢复会话
-    def restore_session(self, messages) -> None:
-        self._anthropic_messages = messages
+    def restore_session(self, data:dict) -> None:
+        self._anthropic_messages = data["anthropicMessages"]
+        self.session_id = data["metadata"]["id"]
     # 自动保存
     def _auto_save(self) -> None:
         save_session(self.session_id,{

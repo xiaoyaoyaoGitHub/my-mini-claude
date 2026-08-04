@@ -7,6 +7,20 @@ SESSION_DIR = Path.cwd() / ".my_claude" / "sessions"
 def _ensure_dir()->None:
    SESSION_DIR.mkdir(parents=True, exist_ok=True)
 
+def pick_session_id() -> str | None:
+   sessions = list_sessions()
+   if not sessions:
+       return None
+   sessions.sort(key = lambda s : s.get("startTime",''), reverse=True)
+   for i, metadata in enumerate(sessions):
+      print(f"{i + 1}:{metadata['id']} - {metadata['startTime']}")
+   raw = input("选择会话编号 (回车取消): ").strip()
+   # 非数字 或者 超出会话编号范围
+   if not raw.isdigit() or int(raw) < 1 or int(raw) > len(sessions):
+      return None
+   return sessions[int(raw)-1]["id"]
+
+
 # 保存 session 会话
 def save_session(session_id:str, data:dict) -> None:
    _ensure_dir()
@@ -25,6 +39,7 @@ def list_sessions() -> list[dict]:
          result.append(data["metadata"])
    return result
 
+# 获取最近一次的会话 id
 def get_latest_session_id() -> str | None:
    sessions = list_sessions()
    if len(sessions) == 0:
@@ -33,9 +48,14 @@ def get_latest_session_id() -> str | None:
    sessions.sort(key = lambda s:s.get("startTime"),reverse=True)
    return sessions[0]["id"]
 
-
 # 加载会话
 def load_session(session_id) -> dict | None:
    session_file = Path(f"{SESSION_DIR}/{session_id}.json")
-   data = json.loads(session_file.read_text())
-   return data
+   if session_file.exists():
+      try:
+         data = json.loads(session_file.read_text())
+         return data
+      except Exception:
+         return None
+   else:
+      return None

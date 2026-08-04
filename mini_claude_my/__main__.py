@@ -13,7 +13,7 @@ load_dotenv() # 用于读取.env中的配置变量
 from .ui import print_error,print_welcome,print_user_prompt
 from .agent import Agent
 from .skills import discover_skills,get_skill_by_name,resolve_skill_prompt
-from .session import get_latest_session_id
+from .session import get_latest_session_id,pick_session_id
 
 # 命令行参数解析
 def parse_args() -> argparse.Namespace:
@@ -47,7 +47,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--thinking", action="store_true", help="enable extended thinking")
     parser.add_argument('--model', '-m', default=None, help="Model to use")
     parser.add_argument('--base_url',default=None, help="API base path")
-    parser.add_argument('--resume', action="store_true", help="Resume last session")
+    parser.add_argument('--continue', '-c', dest="continue_", action="store_true",
+                        help="Resume the most recent session")
+    parser.add_argument('--resume', nargs='?', const="__pick__", default=None,
+                        metavar="SESSION_ID",
+                        help="Resume a session by id (omit id to pick from a list)")
     parser.add_argument('--max-cost', type=float, default=None, help="Max USD spend")
     parser.add_argument('--max-turns', type=int, default=None, help="max agentic turns")
     parser.add_argument('--help', '-h', action="store_true", help="show help")
@@ -201,11 +205,18 @@ Examples:
 
     # 会话回复
     if args.resume:
+        print(f"resume", args.resume)
         # 加载本地会话 session
-        latest_session_id = get_latest_session_id()
-        if latest_session_id:
-            data = load_session(latest_session_id)
-            agent.restore_session(data["anthropicMessages"])
+        target_id = None
+        if args.resume == "__pick__":
+            target_id = pick_session_id()
+        elif args.resume:
+            target_id = args.resume
+        else:
+            target_id = get_latest_session_id()
+        if target_id:
+            data = load_session(target_id)
+            agent.restore_session(data)
         else:
             print("没有可加载的会话")
     # 开启 REPL
